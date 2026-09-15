@@ -112,3 +112,24 @@ ansible-playbook -i inventories/acme_corp/hosts.yml \
   matter where in the sequence a run stops, including a rejected confirm
   gate. See `docs/SCOPE.md` "Audit logging" for the exact fields and what
   this is (and isn't) a substitute for.
+
+## Versioning
+
+Every file in this repo carries its own `Changelog` — a comment block near
+the top for YAML/shell/config files, a `## Changelog` section at the
+bottom for Markdown. Each entry is `<timestamp> — <what changed> —
+<author>`, appended (never rewritten) on every edit. It's a per-file
+history you can read without `git log`, not a replacement for git itself.
+
+---
+
+## Changelog
+
+- 2026-09-15T23:04:48+05:30 — Initial version — architecture, project structure, usage, safety model — Arvind Regukumar
+- 2026-09-15T23:45:40+05:30 — Noted local Phase 2 Vagrant/QEMU test environment in project structure — Arvind Regukumar
+- 2026-09-15T23:53:57+05:30 — Linked docs/PHASE2_SETUP_RUNBOOK.md for Phase 2 setup steps — Arvind Regukumar
+- 2026-09-15T23:57:13+05:30 — Removed direct references to the now-local-only vagrant/ path — Arvind Regukumar
+- 2026-09-16T00:12:11+05:30 — Documented mandatory audit logging in safety model + project structure — Arvind Regukumar
+- 2026-09-16T00:20:49+05:30 — Added "Versioning" section (per-file changelog convention) — Arvind Regukumar
+- 2026-09-16T00:24:55+05:30 — Removed "(with Claude Code)" suffix from the author field per project convention — Arvind Regukumar
+

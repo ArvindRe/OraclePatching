@@ -1,4 +1,7 @@
 ---
+# Changelog:
+#   2026-09-15T23:04:48+05:30 — Initial version — opatch lsinventory + dba_registry_sqlpatch verification — Arvind Regukumar
+#   2026-09-16T00:24:55+05:30 — Removed "(with Claude Code)" suffix from the author field per project convention — Arvind Regukumar
 - name: Verify patch registered in OPatch inventory
   ansible.builtin.command:
     argv: ["{{ oracle_home }}/OPatch/opatch", "lsinventory", "-patch", "{{ patch_id }}"]

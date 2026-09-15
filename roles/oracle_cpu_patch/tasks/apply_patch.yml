@@ -1,4 +1,7 @@
 ---
+# Changelog:
+#   2026-09-15T23:04:48+05:30 — Initial version — opatchauto/opatch apply with block/rescue diagnostics — Arvind Regukumar
+#   2026-09-16T00:24:55+05:30 — Removed "(with Claude Code)" suffix from the author field per project convention — Arvind Regukumar
 - name: Apply patch via opatchauto
   when: use_opatchauto | bool
   block:

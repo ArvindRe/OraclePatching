@@ -1,4 +1,7 @@
 ---
+# Changelog:
+#   2026-09-15T23:04:48+05:30 — Initial version — full apply entry point (serial: 1, any_errors_fatal: true) — Arvind Regukumar
+#   2026-09-16T00:24:55+05:30 — Removed "(with Claude Code)" suffix from the author field per project convention — Arvind Regukumar
 # The real patch application. run_full_patch defaults to true (role
 # defaults), but nothing actually happens without -e confirm_patch=<patch_id>
 # matching exactly — the role's own hard assert refuses to touch anything

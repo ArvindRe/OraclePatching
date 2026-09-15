@@ -1,3 +1,12 @@
+# Changelog:
+#   2026-09-15T23:04:48+05:30 — Initial version — vault password, retry files, .DS_Store — Arvind Regukumar
+#   2026-09-15T23:06:14+05:30 — Added CLAUDE.md/SKILL.md/STATUS.md as local-only — Arvind Regukumar
+#   2026-09-15T23:19:16+05:30 — Added docs/SESSION_SUMMARY_*.md as local-only — Arvind Regukumar
+#   2026-09-15T23:45:40+05:30 — Added test/vagrant/.vagrant and media/ as local-only — Arvind Regukumar
+#   2026-09-15T23:57:13+05:30 — Expanded to keep the whole Phase 2 test scaffold off GitHub — Arvind Regukumar
+#   2026-09-15T23:59:15+05:30 — Updated ignore path for renamed vagrant/ directory — Arvind Regukumar
+#   2026-09-16T00:14:11+05:30 — Added cowork_prompt/ and phase2-setup.sh as local-only — Arvind Regukumar
+#   2026-09-16T00:24:55+05:30 — Removed "(with Claude Code)" suffix from the author field per project convention — Arvind Regukumar
 .vault_pass
 *.retry
 .DS_Store

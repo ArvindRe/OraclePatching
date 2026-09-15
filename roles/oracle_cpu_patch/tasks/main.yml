@@ -1,4 +1,8 @@
 ---
+# Changelog:
+#   2026-09-15T23:04:48+05:30 — Initial version — precheck->stage->confirm gate->apply->datapatch->postcheck dispatch — Arvind Regukumar
+#   2026-09-16T00:12:11+05:30 — Wrapped sequence in block/rescue/always to make audit logging mandatory on every outcome — Arvind Regukumar
+#   2026-09-16T00:24:55+05:30 — Removed "(with Claude Code)" suffix from the author field per project convention — Arvind Regukumar
 # Order: precheck -> stage (+ conflict analysis) -> [hard confirm gate] ->
 # stop -> apply -> start -> datapatch -> postcheck.
 #

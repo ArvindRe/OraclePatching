@@ -1,4 +1,7 @@
 ---
+# Changelog:
+#   2026-09-15T23:04:48+05:30 — Initial version — copy/unzip patch, opatchauto/opatch conflict analysis — Arvind Regukumar
+#   2026-09-16T00:24:55+05:30 — Removed "(with Claude Code)" suffix from the author field per project convention — Arvind Regukumar
 - name: Ensure staging directory exists
   ansible.builtin.file:
     path: "{{ patch_staging_dir }}"

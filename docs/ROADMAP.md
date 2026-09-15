@@ -154,3 +154,12 @@ runbooks, with no undocumented tribal knowledge required.
 | 3 | Linux OS patching | Same validation bar as phase 2, coordinated with phase 1/2 |
 | 4 | Windows service management | Real start/stop verified against a Windows host |
 | 5 | Audit, change control, CI, runbooks, secrets | Safe for **production**, multi-client, handoff-ready |
+
+---
+
+## Changelog
+
+- 2026-09-15T23:04:48+05:30 — Initial version — 5-phase plan to production-ready — Arvind Regukumar
+- 2026-09-16T00:12:11+05:30 — Phase 1 acceptance criteria + Phase 5 updated for mandatory audit logging — Arvind Regukumar
+- 2026-09-16T00:24:55+05:30 — Removed "(with Claude Code)" suffix from the author field per project convention — Arvind Regukumar
+

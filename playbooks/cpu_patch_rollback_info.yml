@@ -1,4 +1,7 @@
 ---
+# Changelog:
+#   2026-09-15T23:04:48+05:30 — Initial version — prints manual rollback procedure, executes nothing — Arvind Regukumar
+#   2026-09-16T00:24:55+05:30 — Removed "(with Claude Code)" suffix from the author field per project convention — Arvind Regukumar
 # Informational only — prints the manual rollback procedure for a patch,
 # does not execute anything. Rollback of a binary patch + SQL changes is a
 # judgment call for a human DBA (is the instance even stable enough to

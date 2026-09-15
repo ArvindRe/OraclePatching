@@ -1,4 +1,7 @@
 ---
+# Changelog:
+#   2026-09-16T00:12:11+05:30 — Initial version — JSON-lines audit entry per invocation, delegate_to localhost — Arvind Regukumar
+#   2026-09-16T00:24:55+05:30 — Removed "(with Claude Code)" suffix from the author field per project convention — Arvind Regukumar
 # Appends one JSON-lines entry per run to audit_log_path on the control
 # node — wired via main.yml's block/rescue/always, so this runs whether
 # the run succeeded, failed, or was precheck-only. _patch_run_outcome and

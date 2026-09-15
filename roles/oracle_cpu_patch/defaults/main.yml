@@ -1,4 +1,8 @@
 ---
+# Changelog:
+#   2026-09-15T23:04:48+05:30 — Initial version — full per-patch variable schema — Arvind Regukumar
+#   2026-09-16T00:12:11+05:30 — Added audit_log_path default for mandatory audit logging — Arvind Regukumar
+#   2026-09-16T00:24:55+05:30 — Removed "(with Claude Code)" suffix from the author field per project convention — Arvind Regukumar
 # Full variable schema for one patch run. Override per-patch in
 # vars/patches/<PATCH_ID>.yml and pass with -e @vars/patches/<PATCH_ID>.yml.
 #

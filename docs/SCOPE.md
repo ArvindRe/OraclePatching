@@ -118,3 +118,12 @@ client) before it's genuinely multi-tenant-safe.
   syntax-check and direct Templar testing) but **not yet validated against
   real Oracle behavior**. Phase 2 of the roadmap exists specifically to
   close that gap before this touches a real client system.
+
+---
+
+## Changelog
+
+- 2026-09-15T23:04:48+05:30 — Initial version — v1 in/out-of-scope table, assumptions, risk notes — Arvind Regukumar
+- 2026-09-16T00:12:11+05:30 — Added "Audit logging" section; moved audit logging out of the out-of-scope table — Arvind Regukumar
+- 2026-09-16T00:24:55+05:30 — Removed "(with Claude Code)" suffix from the author field per project convention — Arvind Regukumar
+

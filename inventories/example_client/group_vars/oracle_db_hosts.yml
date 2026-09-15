@@ -1,3 +1,6 @@
+# Changelog:
+#   2026-09-15T23:04:48+05:30 — Initial version — default connection/behavior vars for the oracle_db_hosts group — Arvind Regukumar
+#   2026-09-16T00:24:55+05:30 — Removed "(with Claude Code)" suffix from the author field per project convention — Arvind Regukumar
 ansible_user: svc_ansible          # dedicated automation account, not oracle directly —
                                     # become_user: oracle/root per-task keeps elevation auditable
 ansible_python_interpreter: /usr/bin/python3

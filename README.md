@@ -55,7 +55,8 @@ OraclePatching/
 │       ├── apply_patch.yml     # opatchauto apply (or manual opatch apply), block/rescue
 │       ├── stop_services.yml / start_services.yml   # manual (non-opatchauto) path only
 │       ├── datapatch.yml       # SQL-level patch, per CDB
-│       └── postcheck.yml       # opatch lsinventory + dba_registry_sqlpatch verification
+│       ├── postcheck.yml       # opatch lsinventory + dba_registry_sqlpatch verification
+│       └── audit_log.yml       # writes one JSON-lines entry per run — see "Safety model"
 └── vars/patches/EXAMPLE_PATCH.yml   # copy per quarterly patch — patch_id, CDBs, zip path
 ```
 
@@ -103,3 +104,11 @@ ansible-playbook -i inventories/acme_corp/hosts.yml \
 - **Rollback is never automated.** `cpu_patch_rollback_info.yml` prints the
   exact manual rollback command sequence for the specific patch/host, but a
   human decides whether to run it and when.
+- **Every invocation is audit-logged — mandatory, not optional.** One JSON
+  Lines entry per run (`audit_log_path`, default
+  `~/.oracle_patching/audit.log` on the control node) recording who,
+  when, which host/patch/CDBs, precheck-only vs. full apply, and
+  success/failure — written via `block`/`rescue`/`always` so it fires no
+  matter where in the sequence a run stops, including a rejected confirm
+  gate. See `docs/SCOPE.md` "Audit logging" for the exact fields and what
+  this is (and isn't) a substitute for.

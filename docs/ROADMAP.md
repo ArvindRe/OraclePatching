@@ -14,7 +14,9 @@ the "never tested against a live database" gap from
 (`cpu_patch_precheck.yml`, `cpu_patch_apply.yml`,
 `cpu_patch_rollback_info.yml`) covering stage → conflict-check → confirm
 gate → stop → apply → start → datapatch → postcheck for a single-instance
-or Oracle Restart 19c CDB.
+or Oracle Restart 19c CDB, plus a mandatory local audit log entry (JSON
+Lines, one per invocation, success or failure) — see `SCOPE.md` "Audit
+logging".
 
 **Acceptance criteria (met):**
 - All YAML parses; all three playbooks pass `ansible-playbook --syntax-check`.
@@ -26,6 +28,10 @@ or Oracle Restart 19c CDB.
   relies on the caller remembering `--tags`).
 - `cpu_patch_apply.yml` refuses to proceed without `confirm_patch` exactly
   matching `patch_id`.
+- Every invocation — success, failure, or precheck-only — writes exactly
+  one audit log entry (`block`/`rescue`/`always` wired in `main.yml`,
+  verified against real `ansible.template.Templar` across all three
+  outcomes, not just read by eye).
 
 **Known gap:** never run against a real Oracle instance. Phase 2 exists to
 close that before anything here touches a client.
@@ -111,10 +117,11 @@ This is the phase that actually earns "production ready" — everything
 before it is necessary but not sufficient.
 
 **Deliverables:**
-- **Audit logging**: every patch run (who, when, patch_id, host, outcome)
-  written somewhere durable and queryable — a central log table (mirroring
-  the Datapump project's `dp_log_entry` pattern) or shipped to the client's
-  existing SIEM/logging pipeline.
+- **Central/queryable audit logging**: v1 already writes a local, durable
+  JSON-lines entry per run (see `SCOPE.md` "Audit logging") — this phase
+  upgrades that to somewhere queryable across hosts/clients: a central log
+  table (mirroring the Datapump project's `dp_log_entry` pattern) or
+  shipped to the client's existing SIEM/logging pipeline.
 - **Change-ticket gate**: `confirm_patch` alone is a good typo-guard, not
   an approval record — add a required `change_ticket` var, validated
   against a real ticketing system's API where the client has one, logged

@@ -26,3 +26,10 @@ confirm_patch: ""
 # to fail on. playbooks/cpu_patch_apply.yml leaves this at the default true.
 run_full_patch: true
 
+# Local, durable audit trail (one JSON object per line) written on the
+# Ansible control node — see audit_log.yml and docs/ROADMAP.md phase 5.
+# Every invocation of this role writes exactly one entry here, success or
+# failure, precheck-only or full apply. Not a substitute for a client's own
+# SIEM/change-ticket system where one exists — override per client if so.
+audit_log_path: "{{ lookup('env', 'HOME') }}/.oracle_patching/audit.log"
+

@@ -24,6 +24,10 @@ OPatch/opatchauto.**
 - A printed (not automated) manual rollback procedure.
 - Multi-client inventory isolation (one `inventories/<client>/` folder per
   client — see "Multi-client model" below).
+- **A mandatory local audit log entry for every invocation** — see
+  "Audit logging" below. Not optional, not tag-gated: every run of
+  `roles/oracle_cpu_patch`, success or failure, precheck-only or full
+  apply, writes exactly one entry.
 
 ## Explicitly out of scope — v1
 
@@ -40,9 +44,35 @@ for a finished product:
 | Real-environment testing | Validated so far via YAML parsing, `ansible-playbook --syntax-check`, and `ansible.template.Templar` unit tests of the trickier Jinja expressions — **never run against a live 19c database** | v2 |
 | Linux OS patching (yum/dnf, kernel, reboot orchestration) | Separate concern from DB-level patching, deliberately deferred out of v1 per scoping decision | v3 |
 | Windows service start/stop | Different connection model entirely (WinRM, not SSH) | v4 |
-| Central audit logging / change-ticket integration | No record today of who ran what, when, against which host, beyond Ansible's own stdout | v5 |
+| Central/queryable audit logging (SIEM, change-ticket integration) | v1's audit log (see below) is a local JSON-lines file, not a queryable central store or a change-ticket gate | v5 |
 | CI (lint, syntax-check on every commit) | Currently run manually | v5 |
 | Secrets manager integration | v1 needs no DB password (OS-authenticated `/ as sysdba`); a client with OS auth disabled needs a vault-based path not yet built | v5 |
+
+## Audit logging
+
+**Every invocation of `roles/oracle_cpu_patch` writes exactly one audit log
+entry — this is not optional and does not depend on tags.** Wired into
+`main.yml` via `block`/`rescue`/`always`, so it fires whether the run
+succeeds, fails partway, or is refused at the confirm gate.
+
+- **Where:** `audit_log_path` (default `~/.oracle_patching/audit.log` on
+  the Ansible control node — override per client/CI environment if that
+  default doesn't fit).
+- **Format:** one JSON object per line (JSON Lines) — `timestamp`
+  (target host's own clock, ISO 8601), `operator` (control-node `$USER`),
+  `host`, `patch_id`, `patch_description`, `oracle_home`, `cdbs` (list of
+  SIDs), `run_mode` (`full_apply` / `precheck_only`), `outcome`
+  (`SUCCESS` / `FAILED`), `error` (populated only on failure).
+- **What it is not:** a central/queryable store, a SIEM feed, or a
+  change-ticket gate — those are v5 (see the scope table above and
+  `ROADMAP.md`). It is the minimum "who ran what, when, against which
+  host, with what outcome" record, kept locally, durable across runs.
+- **Never assume Oracle's own logs are enough on their own** —
+  `opatchauto`/`opatch`/`datapatch` all write their own detailed session
+  logs under `cfgtoollogs/` on the *target* host regardless of this audit
+  log; this entry exists specifically so a human doesn't have to SSH into
+  every target host and grep timestamps to answer "did anyone patch this
+  CDB, and did it work?"
 
 ## Assumptions and prerequisites
 

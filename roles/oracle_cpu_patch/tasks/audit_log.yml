@@ -1,0 +1,36 @@
+---
+# Appends one JSON-lines entry per run to audit_log_path on the control
+# node — wired via main.yml's block/rescue/always, so this runs whether
+# the run succeeded, failed, or was precheck-only. _patch_run_outcome and
+# _patch_run_error are set by main.yml (default SUCCESS, overwritten by
+# its rescue on failure).
+
+- name: Ensure audit log directory exists
+  ansible.builtin.file:
+    path: "{{ audit_log_path | dirname }}"
+    state: directory
+    mode: "0750"
+  delegate_to: localhost
+  become: false
+
+- name: Append audit log entry
+  ansible.builtin.lineinfile:
+    path: "{{ audit_log_path }}"
+    create: true
+    mode: "0640"
+    line: >-
+      {{ {
+        'timestamp': ansible_date_time.iso8601,
+        'operator': lookup('env', 'USER') | default('unknown', true),
+        'host': inventory_hostname,
+        'patch_id': patch_id,
+        'patch_description': patch_description | default(''),
+        'oracle_home': oracle_home,
+        'cdbs': cdbs | map(attribute='sid') | list,
+        'run_mode': 'full_apply' if (run_full_patch | bool) else 'precheck_only',
+        'outcome': _patch_run_outcome,
+        'error': _patch_run_error,
+      } | to_json }}
+    insertafter: EOF
+  delegate_to: localhost
+  become: false

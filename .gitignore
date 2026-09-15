@@ -7,6 +7,6 @@ STATUS.md
 docs/SESSION_SUMMARY_*.md
 
 # Phase 2 Vagrant test environment — local-only, never pushed to GitHub.
-test/vagrant/
+vagrant/
 inventories/vagrant_test/
 docs/PHASE2_SETUP_RUNBOOK.md

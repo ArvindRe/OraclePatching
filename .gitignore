@@ -6,7 +6,6 @@
 #   2026-09-15T23:57:13+05:30 — Expanded to keep the whole Phase 2 test scaffold off GitHub — Arvind Regukumar
 #   2026-09-15T23:59:15+05:30 — Updated ignore path for renamed vagrant/ directory — Arvind Regukumar
 #   2026-09-16T00:14:11+05:30 — Added cowork_prompt/ and phase2-setup.sh as local-only — Arvind Regukumar
-#   2026-09-16T00:24:55+05:30 — Removed "(with Claude Code)" suffix from the author field per project convention — Arvind Regukumar
 .vault_pass
 *.retry
 .DS_Store

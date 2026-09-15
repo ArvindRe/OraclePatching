@@ -1,7 +1,6 @@
 ---
 # Changelog:
 #   2026-09-15T23:04:48+05:30 — Initial version — per-CDB datapatch execution — Arvind Regukumar
-#   2026-09-16T00:24:55+05:30 — Removed "(with Claude Code)" suffix from the author field per project convention — Arvind Regukumar
 # datapatch applies the SQL-level half of the patch. Setting ORACLE_SID to
 # a CDB's SID is sufficient — datapatch walks CDB$ROOT and every open PDB
 # under that CDB itself; no need to loop pdbs separately here (cdbs[].pdbs

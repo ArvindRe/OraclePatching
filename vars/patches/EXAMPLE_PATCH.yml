@@ -1,7 +1,6 @@
 ---
 # Changelog:
 #   2026-09-15T23:04:48+05:30 — Initial version — sample per-patch variable file — Arvind Regukumar
-#   2026-09-16T00:24:55+05:30 — Removed "(with Claude Code)" suffix from the author field per project convention — Arvind Regukumar
 # Sample patch run definition. Copy to vars/patches/<PATCH_ID>.yml per
 # quarterly CPU/RU. No secrets here — connections use OS-authenticated
 # `/ as sysdba` (local bequeath on the DB host), so there's no password to

@@ -131,5 +131,4 @@ history you can read without `git log`, not a replacement for git itself.
 - 2026-09-15T23:57:13+05:30 — Removed direct references to the now-local-only vagrant/ path — Arvind Regukumar
 - 2026-09-16T00:12:11+05:30 — Documented mandatory audit logging in safety model + project structure — Arvind Regukumar
 - 2026-09-16T00:20:49+05:30 — Added "Versioning" section (per-file changelog convention) — Arvind Regukumar
-- 2026-09-16T00:24:55+05:30 — Removed "(with Claude Code)" suffix from the author field per project convention — Arvind Regukumar
 

@@ -1,7 +1,6 @@
 ---
 # Changelog:
 #   2026-09-15T23:04:48+05:30 — Initial version — read-only precheck/stage entry point (run_full_patch: false) — Arvind Regukumar
-#   2026-09-16T00:24:55+05:30 — Removed "(with Claude Code)" suffix from the author field per project convention — Arvind Regukumar
 # Safe to run any time — always ends in a clean PLAY RECAP. Read-only checks
 # (OPatch version, existing inventory, free space) plus staging the patch on
 # the host (copy, unzip, opatchauto -analyze conflict check). Makes no

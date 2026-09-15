@@ -58,7 +58,8 @@ OraclePatching/
 │       └── postcheck.yml       # opatch lsinventory + dba_registry_sqlpatch verification
 ├── vars/patches/EXAMPLE_PATCH.yml   # copy per quarterly patch — patch_id, CDBs, zip path
 └── test/vagrant/                    # local Vagrant+QEMU 19c CDB to run the playbooks
-                                      # against for real — see test/vagrant/README.md
+                                      # against for real — see docs/PHASE2_SETUP_RUNBOOK.md
+                                      # for setup steps, test/vagrant/README.md for reference
 ```
 
 ## Usage

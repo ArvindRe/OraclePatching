@@ -56,11 +56,12 @@ OraclePatching/
 │       ├── stop_services.yml / start_services.yml   # manual (non-opatchauto) path only
 │       ├── datapatch.yml       # SQL-level patch, per CDB
 │       └── postcheck.yml       # opatch lsinventory + dba_registry_sqlpatch verification
-├── vars/patches/EXAMPLE_PATCH.yml   # copy per quarterly patch — patch_id, CDBs, zip path
-└── test/vagrant/                    # local Vagrant+QEMU 19c CDB to run the playbooks
-                                      # against for real — see docs/PHASE2_SETUP_RUNBOOK.md
-                                      # for setup steps, test/vagrant/README.md for reference
+└── vars/patches/EXAMPLE_PATCH.yml   # copy per quarterly patch — patch_id, CDBs, zip path
 ```
+
+A local Vagrant+QEMU Phase 2 test environment (a real 19c CDB to run the
+playbooks against) exists but is kept out of this repo — see
+`docs/ROADMAP.md` Phase 2.
 
 ## Usage
 

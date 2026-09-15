@@ -6,8 +6,7 @@ SKILL.md
 STATUS.md
 docs/SESSION_SUMMARY_*.md
 
-# Vagrant test environment — Oracle install media is licensed, not
-# redistributable, and .vagrant/ is local VM state.
-test/vagrant/.vagrant/
-test/vagrant/media/*
-!test/vagrant/media/.gitkeep
+# Phase 2 Vagrant test environment — local-only, never pushed to GitHub.
+test/vagrant/
+inventories/vagrant_test/
+docs/PHASE2_SETUP_RUNBOOK.md

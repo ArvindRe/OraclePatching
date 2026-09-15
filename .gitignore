@@ -10,3 +10,5 @@ docs/SESSION_SUMMARY_*.md
 vagrant/
 inventories/vagrant_test/
 docs/PHASE2_SETUP_RUNBOOK.md
+cowork_prompt/
+phase2-setup.sh

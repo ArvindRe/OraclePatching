@@ -1,0 +1,37 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+Vagrant.configure("2") do |config|
+  config.vm.box = "oraclelinux/8"
+  config.vm.box_url = "https://oracle.github.io/vagrant-projects/boxes/oraclelinux/8.json"
+  config.vm.hostname = "ora19c-test"
+  config.vm.box_check_update = false
+
+  # Oracle DB 19c is x86_64-only; on an Apple Silicon host QEMU falls back to
+  # TCG software emulation (no HVF acceleration across architectures), so
+  # provisioning is much slower than on native x86_64 hardware. Sized small
+  # deliberately (see README.md) to fit an 8GB-RAM host, not for realistic
+  # performance testing.
+  config.vm.provider "qemu" do |qe|
+    qe.arch = "x86_64"
+    qe.machine = "q35"
+    qe.cpu = "qemu64"
+    qe.memory = "4G"
+    qe.smp = "cpus=2,sockets=1,cores=2,threads=1"
+    qe.net_device = "virtio-net-pci"
+  end
+
+  config.vm.network "forwarded_port", guest: 22, host: 2222, id: "ssh"
+  config.vm.network "forwarded_port", guest: 1521, host: 15211  # Oracle listener
+  config.vm.network "forwarded_port", guest: 5500, host: 55001  # EM Express (optional)
+
+  # rsync-based sync of a multi-GB Oracle zip is slow and not guaranteed to
+  # work on every vagrant-qemu version — see README.md "If synced_folder
+  # doesn't work" for the scp fallback.
+  config.vm.synced_folder "./media", "/vagrant/media", type: "rsync",
+    rsync__exclude: [".gitkeep"], rsync__args: ["--archive", "--partial"]
+
+  config.vm.provision "shell", path: "provision/00_os_prereqs.sh"
+  config.vm.provision "shell", path: "provision/01_install_db_software.sh"
+  config.vm.provision "shell", path: "provision/02_create_cdb.sh"
+end

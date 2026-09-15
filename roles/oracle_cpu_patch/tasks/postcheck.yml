@@ -1,0 +1,44 @@
+---
+- name: Verify patch registered in OPatch inventory
+  ansible.builtin.command:
+    argv: ["{{ oracle_home }}/OPatch/opatch", "lsinventory", "-patch", "{{ patch_id }}"]
+  become_user: "{{ oracle_os_owner }}"
+  environment:
+    ORACLE_HOME: "{{ oracle_home }}"
+  register: dp_lsinv
+  changed_when: false
+  failed_when: patch_id not in dp_lsinv.stdout
+
+- name: Query dba_registry_sqlpatch status per CDB
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      printf "set pages 0 feed off\nselect patch_id, patch_type, status from dba_registry_sqlpatch where patch_id = %s;\nexit;\n" "{{ patch_id }}" |
+        sqlplus -s / as sysdba
+    executable: /bin/bash
+  become_user: "{{ oracle_os_owner }}"
+  environment:
+    ORACLE_HOME: "{{ oracle_home }}"
+    ORACLE_SID: "{{ item.sid }}"
+    PATH: "{{ oracle_home }}/bin:/usr/bin:/bin"
+  register: dp_sqlpatch_check
+  changed_when: false
+  loop: "{{ cdbs }}"
+  loop_control:
+    label: "{{ item.sid }}"
+
+- name: Show dba_registry_sqlpatch status per CDB
+  ansible.builtin.debug:
+    msg: "{{ item.item.sid }}: {{ item.stdout_lines | default(['(no rows — patch not registered for this CDB)']) }}"
+  loop: "{{ dp_sqlpatch_check.results }}"
+  loop_control:
+    label: "{{ item.item.sid }}"
+
+- name: Post-apply checklist
+  ansible.builtin.debug:
+    msg:
+      - "Patch {{ patch_id }} ({{ patch_description }}) applied on {{ inventory_hostname }} — before closing out:"
+      - "  1. Confirm listener + all CDB/PDB instances are up and accepting connections."
+      - "  2. Re-enable any monitoring/EM agent alerting that was paused for the maintenance window."
+      - "  3. Spot-check an application-level smoke test, not just SQL*Plus connectivity."
+      - "  4. Record the patch_id + apply date in your change log — dba_registry_sqlpatch above is the source of truth."

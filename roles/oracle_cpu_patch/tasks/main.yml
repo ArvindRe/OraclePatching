@@ -1,0 +1,67 @@
+---
+# Order: precheck -> stage (+ conflict analysis) -> [hard confirm gate] ->
+# stop -> apply -> start -> datapatch -> postcheck.
+#
+# precheck/stage are read-only aside from copying the patch zip to the host
+# and unzipping it — safe to run any time, any number of times, via
+# playbooks/cpu_patch_precheck.yml.
+#
+# Everything from the confirm gate onward changes running state (stops a
+# listener/instance, applies a binary patch, runs SQL against the
+# dictionary) and is refused without an exact confirm_patch match — no
+# matter which tags are passed, since the assert task carries the same
+# [apply, datapatch] tags as everything it's guarding.
+
+- name: Assert required patch variables are set
+  ansible.builtin.assert:
+    that:
+      - patch_id | length > 0
+      - oracle_home | length > 0
+      - cdbs | length > 0
+    fail_msg: "patch_id, oracle_home, and at least one entry in cdbs are required."
+    quiet: true
+  tags: [always]
+
+- name: Precheck
+  ansible.builtin.import_tasks: precheck.yml
+  tags: [precheck]
+
+- name: Stage patch and run conflict analysis
+  ansible.builtin.import_tasks: stage_patch.yml
+  tags: [stage]
+
+- name: Confirm before making any DB/service state changes
+  ansible.builtin.assert:
+    that:
+      - confirm_patch == patch_id
+    fail_msg: >-
+      Refusing to apply patch {{ patch_id }} on {{ inventory_hostname }} without explicit confirmation.
+      Review the precheck/stage output above, then re-run with -e confirm_patch={{ patch_id }}.
+    quiet: true
+  tags: [apply, datapatch]
+  when: run_full_patch | bool
+
+- name: Stop services (manual path only — opatchauto handles this itself)
+  ansible.builtin.import_tasks: stop_services.yml
+  tags: [apply]
+  when: run_full_patch | bool and not (use_opatchauto | bool)
+
+- name: Apply patch
+  ansible.builtin.import_tasks: apply_patch.yml
+  tags: [apply]
+  when: run_full_patch | bool
+
+- name: Start services (manual path only)
+  ansible.builtin.import_tasks: start_services.yml
+  tags: [apply]
+  when: run_full_patch | bool and not (use_opatchauto | bool)
+
+- name: Run datapatch
+  ansible.builtin.import_tasks: datapatch.yml
+  tags: [datapatch]
+  when: run_full_patch | bool
+
+- name: Postcheck
+  ansible.builtin.import_tasks: postcheck.yml
+  tags: [postcheck]
+  when: run_full_patch | bool

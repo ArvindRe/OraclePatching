@@ -1,0 +1,44 @@
+---
+- name: Apply patch via opatchauto
+  when: use_opatchauto | bool
+  block:
+    - name: Run opatchauto apply
+      ansible.builtin.command:
+        argv: ["{{ oracle_home }}/OPatch/opatchauto", "apply", "{{ patch_staging_dir }}/{{ patch_id }}"]
+      become_user: root
+      register: dp_apply
+      changed_when: true
+
+  rescue:
+    - name: Surface opatchauto failure details
+      ansible.builtin.fail:
+        msg: >-
+          opatchauto apply failed for patch {{ patch_id }} on {{ oracle_home }} ({{ inventory_hostname }}).
+          stdout: {{ dp_apply.stdout | default('') }}
+          stderr: {{ dp_apply.stderr | default('') }}
+          Full session logs: {{ oracle_home }}/cfgtoollogs/opatchauto/ — review before considering rollback
+          (see playbooks/cpu_patch_rollback_info.yml).
+
+- name: Apply patch via manual opatch (non-opatchauto path)
+  when: not (use_opatchauto | bool)
+  block:
+    - name: Run opatch apply
+      ansible.builtin.command:
+        argv: ["{{ oracle_home }}/OPatch/opatch", "apply", "{{ patch_staging_dir }}/{{ patch_id }}", "-silent"]
+      become_user: "{{ oracle_os_owner }}"
+      environment:
+        ORACLE_HOME: "{{ oracle_home }}"
+      register: dp_apply_manual
+      changed_when: true
+
+  rescue:
+    - name: Surface opatch failure details
+      ansible.builtin.fail:
+        msg: >-
+          opatch apply failed for patch {{ patch_id }} on {{ oracle_home }} ({{ inventory_hostname }}).
+          stdout: {{ dp_apply_manual.stdout | default('') }}
+          stderr: {{ dp_apply_manual.stderr | default('') }}
+          Full session logs: {{ oracle_home }}/cfgtoollogs/opatch/ — review before considering rollback
+          (see playbooks/cpu_patch_rollback_info.yml). The instance is currently DOWN
+          (stop_services.yml already ran) — do not start it back up against a half-applied patch
+          without DBA review.

@@ -1,0 +1,30 @@
+---
+# Manual (non-opatchauto) path only. Reached solely through main.yml's
+# confirm_patch gate — never runs without an explicit, exact match.
+
+- name: Stop listener
+  ansible.builtin.command:
+    argv: ["{{ oracle_home }}/bin/lsnrctl", "stop"]
+  become_user: "{{ oracle_os_owner }}"
+  environment:
+    ORACLE_HOME: "{{ oracle_home }}"
+  register: dp_lsnr_stop
+  changed_when: "'completed successfully' in dp_lsnr_stop.stdout"
+  failed_when: false   # a listener that's already down is fine — apply_patch.yml's own checks catch real problems
+
+- name: Shut down each CDB instance (immediate)
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      printf 'shutdown immediate;\nexit;\n' | sqlplus -s / as sysdba
+    executable: /bin/bash
+  become_user: "{{ oracle_os_owner }}"
+  environment:
+    ORACLE_HOME: "{{ oracle_home }}"
+    ORACLE_SID: "{{ item.sid }}"
+    PATH: "{{ oracle_home }}/bin:/usr/bin:/bin"
+  loop: "{{ cdbs }}"
+  loop_control:
+    label: "{{ item.sid }}"
+  register: dp_shutdown
+  changed_when: true

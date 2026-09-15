@@ -1,0 +1,42 @@
+---
+- name: Check OPatch version
+  ansible.builtin.command:
+    argv: ["{{ oracle_home }}/OPatch/opatch", "version"]
+  become: true
+  become_user: "{{ oracle_os_owner }}"
+  environment:
+    ORACLE_HOME: "{{ oracle_home }}"
+  register: dp_opatch_version
+  changed_when: false
+
+- name: Show OPatch version
+  ansible.builtin.debug:
+    var: dp_opatch_version.stdout_lines
+
+- name: Capture current patch inventory (baseline)
+  ansible.builtin.command:
+    argv: ["{{ oracle_home }}/OPatch/opatch", "lsinventory"]
+  become: true
+  become_user: "{{ oracle_os_owner }}"
+  environment:
+    ORACLE_HOME: "{{ oracle_home }}"
+  register: dp_lsinventory_baseline
+  changed_when: false
+
+- name: Warn if this patch already appears applied
+  ansible.builtin.debug:
+    msg: "WARNING: patch {{ patch_id }} already appears in opatch lsinventory on {{ inventory_hostname }} — confirm this run is intentional (e.g. a re-apply after a failed attempt) before proceeding."
+  when: patch_id in dp_lsinventory_baseline.stdout
+
+- name: Check free space under oracle_home's filesystem
+  ansible.builtin.shell:
+    cmd: "df -Pk {{ oracle_home }} | tail -1 | awk '{print $4}'"
+  changed_when: false
+  register: dp_free_kb
+
+- name: Assert minimum free space
+  ansible.builtin.assert:
+    that:
+      - (dp_free_kb.stdout | trim | int) > (min_free_space_gb | int * 1024 * 1024)
+    fail_msg: "Less than {{ min_free_space_gb }}GB free under {{ oracle_home }} on {{ inventory_hostname }} — clear space before staging the patch."
+    quiet: true

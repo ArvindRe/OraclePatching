@@ -1,0 +1,20 @@
+---
+# Sample patch run definition. Copy to vars/patches/<PATCH_ID>.yml per
+# quarterly CPU/RU. No secrets here — connections use OS-authenticated
+# `/ as sysdba` (local bequeath on the DB host), so there's no password to
+# vault for the common case. See README.md if a client site has OS
+# authentication disabled.
+
+patch_id: "34765931"
+patch_description: "19.24 Release Update (Oct 2024 CPU/RU)"
+patch_zip_local_path: "/Users/youruser/patches/p34765931_190000_Linux-x86-64.zip"
+patch_staging_dir: /u01/patches
+target_hosts: oracle_db_hosts
+
+cdbs:
+  - sid: CDB1
+    pdbs: [PDB1, PDB2]
+
+# Never fill this in here — pass at apply time:
+#   -e confirm_patch=34765931
+confirm_patch: ""

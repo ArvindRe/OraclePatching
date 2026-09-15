@@ -1,0 +1,28 @@
+---
+# Manual (non-opatchauto) path only — mirrors stop_services.yml.
+
+- name: Start each CDB instance
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      printf 'startup;\nexit;\n' | sqlplus -s / as sysdba
+    executable: /bin/bash
+  become_user: "{{ oracle_os_owner }}"
+  environment:
+    ORACLE_HOME: "{{ oracle_home }}"
+    ORACLE_SID: "{{ item.sid }}"
+    PATH: "{{ oracle_home }}/bin:/usr/bin:/bin"
+  loop: "{{ cdbs }}"
+  loop_control:
+    label: "{{ item.sid }}"
+  register: dp_startup
+  changed_when: true
+
+- name: Start listener
+  ansible.builtin.command:
+    argv: ["{{ oracle_home }}/bin/lsnrctl", "start"]
+  become_user: "{{ oracle_os_owner }}"
+  environment:
+    ORACLE_HOME: "{{ oracle_home }}"
+  register: dp_lsnr_start
+  changed_when: "'completed successfully' in dp_lsnr_start.stdout"

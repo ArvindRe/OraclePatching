@@ -1,0 +1,10 @@
+ansible_user: svc_ansible          # dedicated automation account, not oracle directly —
+                                    # become_user: oracle/root per-task keeps elevation auditable
+ansible_python_interpreter: /usr/bin/python3
+
+oracle_os_owner: oracle
+oracle_os_group: oinstall
+
+min_free_space_gb: 20              # precheck fails below this, under oracle_home's filesystem
+use_opatchauto: true               # opatchauto (recommended, handles stop/start itself) vs
+                                    # manual opatch apply + explicit stop/start

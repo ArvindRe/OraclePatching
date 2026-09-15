@@ -1,0 +1,20 @@
+---
+# The real patch application. run_full_patch defaults to true (role
+# defaults), but nothing actually happens without -e confirm_patch=<patch_id>
+# matching exactly — the role's own hard assert refuses to touch anything
+# (stop services, apply the patch, run datapatch) otherwise. Runs
+# precheck/stage again first (cheap, and re-verifies nothing changed since
+# you last reviewed it), then stop -> apply -> start -> datapatch -> postcheck.
+#
+# Usage:
+#   ansible-playbook playbooks/cpu_patch_apply.yml \
+#     -e @vars/patches/34765931.yml \
+#     -e confirm_patch=34765931
+
+- name: Oracle CPU/PSU patch — apply
+  hosts: "{{ target_hosts | default('oracle_db_hosts') }}"
+  gather_facts: true
+  serial: 1
+  any_errors_fatal: true
+  roles:
+    - role: oracle_cpu_patch

@@ -1,0 +1,21 @@
+---
+# Safe to run any time — always ends in a clean PLAY RECAP. Read-only checks
+# (OPatch version, existing inventory, free space) plus staging the patch on
+# the host (copy, unzip, opatchauto -analyze conflict check). Makes no
+# change to any running database or service: run_full_patch: false stops
+# the role before it reaches the confirm gate, rather than relying on
+# --tags (a role's own `tags:` key adds tags to its tasks, it does not
+# filter which ones run — only a CLI --tags flag does that).
+#
+# Usage:
+#   ansible-playbook playbooks/cpu_patch_precheck.yml -e @vars/patches/34765931.yml
+
+- name: Oracle CPU/PSU patch — precheck and stage
+  hosts: "{{ target_hosts | default('oracle_db_hosts') }}"
+  gather_facts: true
+  serial: 1
+  any_errors_fatal: true
+  vars:
+    run_full_patch: false
+  roles:
+    - role: oracle_cpu_patch

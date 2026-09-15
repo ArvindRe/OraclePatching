@@ -1,0 +1,63 @@
+---
+- name: Ensure staging directory exists
+  ansible.builtin.file:
+    path: "{{ patch_staging_dir }}"
+    state: directory
+    owner: "{{ oracle_os_owner }}"
+    group: "{{ oracle_os_group }}"
+    mode: "0750"
+
+- name: Copy patch zip to host
+  ansible.builtin.copy:
+    src: "{{ patch_zip_local_path }}"
+    dest: "{{ patch_staging_dir }}/{{ patch_zip_local_path | basename }}"
+    owner: "{{ oracle_os_owner }}"
+    group: "{{ oracle_os_group }}"
+    mode: "0640"
+
+- name: Unzip patch
+  ansible.builtin.unarchive:
+    src: "{{ patch_staging_dir }}/{{ patch_zip_local_path | basename }}"
+    dest: "{{ patch_staging_dir }}"
+    remote_src: true
+    owner: "{{ oracle_os_owner }}"
+    group: "{{ oracle_os_group }}"
+
+- name: Conflict/prereq analysis (dry run, opatchauto)
+  ansible.builtin.command:
+    argv:
+      - "{{ oracle_home }}/OPatch/opatchauto"
+      - apply
+      - "{{ patch_staging_dir }}/{{ patch_id }}"
+      - -analyze
+  become_user: root
+  register: dp_analyze
+  changed_when: false
+  failed_when: false   # surfaced for review below — the hard gate is the confirm_patch assert, not this rc
+  when: use_opatchauto | bool
+
+- name: Show conflict analysis output
+  ansible.builtin.debug:
+    var: dp_analyze.stdout_lines
+  when: use_opatchauto | bool
+
+- name: Conflict check (manual path, opatch prereq)
+  ansible.builtin.command:
+    argv:
+      - "{{ oracle_home }}/OPatch/opatch"
+      - prereq
+      - CheckConflictAgainstOHWithDetail
+      - -ph
+      - "{{ patch_staging_dir }}/{{ patch_id }}"
+  become_user: "{{ oracle_os_owner }}"
+  environment:
+    ORACLE_HOME: "{{ oracle_home }}"
+  register: dp_conflict_manual
+  changed_when: false
+  failed_when: false
+  when: not (use_opatchauto | bool)
+
+- name: Show conflict check output (manual path)
+  ansible.builtin.debug:
+    var: dp_conflict_manual.stdout_lines
+  when: not (use_opatchauto | bool)

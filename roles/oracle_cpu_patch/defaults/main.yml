@@ -1,0 +1,28 @@
+---
+# Full variable schema for one patch run. Override per-patch in
+# vars/patches/<PATCH_ID>.yml and pass with -e @vars/patches/<PATCH_ID>.yml.
+#
+# oracle_home / grid_home live on the inventory host (see
+# inventories/*/hosts.yml) — a patch run only needs to say WHICH patch and
+# WHICH CDBs, same separation of concerns as the datapump Ansible project.
+
+patch_id: ""                     # Oracle patch number, e.g. "34765931"
+patch_description: ""            # free text, shown in precheck/postcheck output
+patch_zip_local_path: ""         # path on the Ansible control node to the downloaded patch zip
+patch_staging_dir: /u01/patches  # where the zip is copied + unzipped on the target host
+
+cdbs: []                         # - sid: CDB1
+                                  #   pdbs: [PDB1, PDB2]     # pdbs: for postcheck reporting only —
+                                                              # datapatch itself covers all open PDBs
+                                                              # under a CDB automatically via ORACLE_SID
+
+# Refuses to touch anything (stop services, apply the patch, run datapatch)
+# unless this exactly equals patch_id — set via -e confirm_patch=<patch_id>
+# at apply time. Never fill this in inside a committed vars file.
+confirm_patch: ""
+
+# playbooks/cpu_patch_precheck.yml sets this to false so it always ends in a
+# clean, green PLAY RECAP — precheck/stage only, no confirm-gate assertion
+# to fail on. playbooks/cpu_patch_apply.yml leaves this at the default true.
+run_full_patch: true
+

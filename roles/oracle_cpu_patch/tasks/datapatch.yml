@@ -1,0 +1,26 @@
+---
+# datapatch applies the SQL-level half of the patch. Setting ORACLE_SID to
+# a CDB's SID is sufficient — datapatch walks CDB$ROOT and every open PDB
+# under that CDB itself; no need to loop pdbs separately here (cdbs[].pdbs
+# is used by postcheck.yml for per-PDB status reporting instead).
+
+- name: Run datapatch for each CDB
+  ansible.builtin.command:
+    argv: ["{{ oracle_home }}/OPatch/datapatch", "-verbose"]
+  become_user: "{{ oracle_os_owner }}"
+  environment:
+    ORACLE_HOME: "{{ oracle_home }}"
+    ORACLE_SID: "{{ item.sid }}"
+    PATH: "{{ oracle_home }}/bin:{{ oracle_home }}/OPatch:/usr/bin:/bin"
+  register: dp_datapatch
+  changed_when: "'No interim patches need to be rolled back' not in dp_datapatch.stdout"
+  loop: "{{ cdbs }}"
+  loop_control:
+    label: "{{ item.sid }}"
+
+- name: Show datapatch output per CDB
+  ansible.builtin.debug:
+    msg: "{{ item.item.sid }}: {{ item.stdout_lines }}"
+  loop: "{{ dp_datapatch.results }}"
+  loop_control:
+    label: "{{ item.item.sid }}"

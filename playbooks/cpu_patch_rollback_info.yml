@@ -1,0 +1,33 @@
+---
+# Informational only — prints the manual rollback procedure for a patch,
+# does not execute anything. Rollback of a binary patch + SQL changes is a
+# judgment call for a human DBA (is the instance even stable enough to
+# shut down cleanly right now?), not something to automate blindly.
+#
+# Usage:
+#   ansible-playbook playbooks/cpu_patch_rollback_info.yml -e @vars/patches/34765931.yml
+
+- name: Oracle CPU/PSU patch — rollback procedure (informational)
+  hosts: "{{ target_hosts | default('oracle_db_hosts') }}"
+  gather_facts: false
+  tasks:
+    - name: Print manual rollback steps
+      ansible.builtin.debug:
+        msg:
+          - "Manual rollback procedure for patch {{ patch_id }} ({{ patch_description }}) on {{ oracle_home }} — run these yourself, deliberately:"
+          - ""
+          - "1. Stop dependent services:"
+          - "   {{ oracle_home }}/bin/lsnrctl stop"
+          - "   sqlplus / as sysdba -> shutdown immediate;   (each of: {{ cdbs | map(attribute='sid') | join(', ') }})"
+          - ""
+          - "2. Roll back the binary patch:"
+          - "   opatchauto path:  {{ oracle_home }}/OPatch/opatchauto rollback {{ patch_staging_dir }}/{{ patch_id }}"
+          - "   manual path:      {{ oracle_home }}/OPatch/opatch rollback -id {{ patch_id }}"
+          - ""
+          - "3. Restart and roll back the SQL-level changes:"
+          - "   sqlplus / as sysdba -> startup;   (each CDB)"
+          - "   {{ oracle_home }}/OPatch/datapatch -rollback {{ patch_id }} -verbose   (each CDB, ORACLE_SID set accordingly)"
+          - ""
+          - "4. Verify:"
+          - "   {{ oracle_home }}/OPatch/opatch lsinventory -patch {{ patch_id }}   (should no longer show as applied)"
+          - "   select patch_id, status from dba_registry_sqlpatch where patch_id = {{ patch_id }};   (each CDB)"

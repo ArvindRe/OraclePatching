@@ -1,3 +1,6 @@
 .vault_pass
 *.retry
 .DS_Store
+CLAUDE.md
+SKILL.md
+STATUS.md

@@ -1,0 +1,11 @@
+# Changelog:
+#   2026-09-22T15:53:48+05:30 — Initial POC dependency set (registry, audit, executor, RAG, LLM client) — Arvind Regukumar
+
+pydantic>=2.7,<3
+PyYAML>=6.0
+jsonschema>=4.22
+qdrant-client==1.10.1  # pinned to match docker-compose.yml's qdrant/qdrant:v1.10.1 — client/server major.minor must match
+psycopg[binary]>=3.1
+openai>=1.30          # used only as an OpenAI-compatible client against a local LLM server (Ollama / llama.cpp), never the hosted API
+sentence-transformers>=3.0
+pytest>=8.2

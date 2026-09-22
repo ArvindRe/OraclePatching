@@ -1,0 +1,35 @@
+# Changelog:
+#   2026-09-22T15:53:48+05:30 — Initial POC settings (paths, Qdrant/Postgres, local LLM endpoint) — Arvind Regukumar
+
+# Path to the base OraclePatching repo this scaffold extends (playbooks, inventories,
+# vars/patches). Never duplicate those files here — always reference by path.
+base_repo_path: ".."
+
+# Qdrant: static knowledge store (structured procedure objects, Oracle/RAC/ASM/DG docs).
+qdrant:
+  host: localhost
+  port: 6333
+  collection: oracle_procedures
+
+# Postgres: operational store (per-database state — last patch level, last successful
+# patch date, known issues, Data Guard status). Updated after every scan and execution.
+postgres:
+  host: localhost
+  port: 5432
+  db: oracle_patching_ops
+  user: patching_agent
+  # Password is supplied via POSTGRES_PASSWORD env var, never checked in here.
+
+# Local LLM, OpenAI-compatible endpoint (Ollama or llama.cpp server). No hosted API keys —
+# air-gapped by design (see DB_PATCHING_SCOPE.md "Ingestion").
+llm:
+  base_url: "http://localhost:11434/v1"
+  model: "qwen2.5:7b-instruct-q4_K_M"
+  max_schema_retries: 2
+  temperature: 0.1
+
+audit:
+  log_path: "~/.oracle_patching/agentic_audit.jsonl"
+
+registry:
+  procedures_dir: "registry/procedures"

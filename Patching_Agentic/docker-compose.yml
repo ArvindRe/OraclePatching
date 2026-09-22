@@ -1,0 +1,32 @@
+# Changelog:
+#   2026-09-22T15:53:48+05:30 — Initial local POC infra: Qdrant (static store) + Postgres (operational store) — Arvind Regukumar
+
+# Local-only POC infrastructure. On the real air-gapped box described in
+# DB_PATCHING_SCOPE.md, these images themselves have to arrive via the same
+# one-directional DMZ transfer as the knowledge content — this compose file
+# assumes an environment where `docker pull` still works (this dev machine),
+# not the production target.
+
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.10.1
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: oracle_patching_ops
+      POSTGRES_USER: patching_agent
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD before starting}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./rag/ingestion/postgres_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+
+volumes:
+  qdrant_data:
+  postgres_data:

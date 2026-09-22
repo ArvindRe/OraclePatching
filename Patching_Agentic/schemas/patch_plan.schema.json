@@ -1,0 +1,45 @@
+{
+  "_changelog": [
+    "2026-09-22T15:53:48+05:30 — Initial patch plan schema, matches DB_PATCHING_SCOPE.md component 3 example — Arvind Regukumar"
+  ],
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PatchPlan",
+  "description": "The only shape a Patch Agent output is allowed to take. procedure_id is validated separately against the ProcedureRegistry allow-list before the Executor will look at anything else in this object.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "procedure_id",
+    "target",
+    "current_version",
+    "target_version",
+    "preconditions_checked"
+  ],
+  "properties": {
+    "procedure_id": {
+      "type": "string",
+      "description": "Must exist in the ProcedureRegistry allow-list. Never a free-form action."
+    },
+    "target": {
+      "type": "string",
+      "description": "Inventory hostname/alias the plan applies to, must match the Scanner's scan for the same target."
+    },
+    "current_version": { "type": "string" },
+    "target_version": { "type": "string" },
+    "preconditions_checked": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rman_backup_available": { "type": "boolean" },
+        "archivelog_backup_available": { "type": "boolean" },
+        "oracle_home_verified": { "type": "boolean" },
+        "opatch_version_verified": { "type": "boolean" },
+        "disk_space_verified": { "type": "boolean" },
+        "data_guard_synchronized": { "type": "boolean" }
+      }
+    },
+    "risk_notes": {
+      "type": "string",
+      "description": "Optional free-text risk commentary for the human approver's report. Never executed, display-only."
+    }
+  }
+}

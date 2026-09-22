@@ -1,0 +1,33 @@
+# Changelog:
+#   2026-09-22T15:53:48+05:30 — Initial registry entry, single-instance 19c RU/CPU patch — Arvind Regukumar
+
+procedure_id: oracle_19c_ru_patch
+description: >
+  CPU/PSU (quarterly Release Update) patch of a single-instance or Oracle Restart
+  19c CDB via opatchauto/opatch, wrapping roles/oracle_cpu_patch end to end
+  (precheck/stage -> confirm gate -> stop -> apply -> start -> datapatch -> postcheck).
+target_type: single_instance
+min_supported_version: "19.0.0.0.0"
+max_supported_version: "19.99.99.99.99"
+
+precheck_playbook: playbooks/cpu_patch_precheck.yml
+apply_playbook: playbooks/cpu_patch_apply.yml
+rollback_info_playbook: playbooks/cpu_patch_rollback_info.yml
+confirm_var_name: confirm_patch
+
+required_preconditions:
+  - rman_backup_available
+  - archivelog_backup_available
+  - oracle_home_verified
+  - opatch_version_verified
+  - disk_space_verified
+  - data_guard_synchronized
+
+requires_grid_infra: false
+
+notes: >
+  Matches Phase 1 (docs/ROADMAP.md) of the base OraclePatching repo. As of
+  STATUS.md, cpu_patch_precheck.yml has run against a real 19c CDB
+  (vagrant/); cpu_patch_apply.yml has not yet been run end-to-end against a
+  live instance — the Executor's dry-run + approval gate should not be read as
+  proof this procedure has been exercised for real.

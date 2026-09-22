@@ -1,0 +1,40 @@
+# Changelog:
+#   2026-09-22T15:53:48+05:30 — Initial registry entry, RAC/GI 19c RU/CPU patch (unverified path) — Arvind Regukumar
+
+procedure_id: oracle_19c_rac_ru_patch
+description: >
+  CPU/PSU (quarterly Release Update) patch of a RAC/Grid-Infrastructure-integrated
+  19c CDB. Wraps the same roles/oracle_cpu_patch sequence as
+  oracle_19c_ru_patch, using the inventory's grid_home var — NOT a separate
+  RAC-specific task path (none exists yet).
+
+target_type: rac
+min_supported_version: "19.0.0.0.0"
+max_supported_version: "19.99.99.99.99"
+
+precheck_playbook: playbooks/cpu_patch_precheck.yml
+apply_playbook: playbooks/cpu_patch_apply.yml
+rollback_info_playbook: playbooks/cpu_patch_rollback_info.yml
+confirm_var_name: confirm_patch
+
+required_preconditions:
+  - rman_backup_available
+  - archivelog_backup_available
+  - oracle_home_verified
+  - opatch_version_verified
+  - disk_space_verified
+  - data_guard_synchronized
+
+requires_grid_infra: true
+
+notes: >
+  UNVERIFIED PATH. Per STATUS.md Open Issues: "RAC and Grid Infrastructure paths
+  are unverified — grid_home is accepted as an inventory var but no GI-specific
+  task path has been built or exercised." docs/ROADMAP.md Phase 2 lists RAC/GI
+  verification as a still-open exit-gate item. The approval report (see
+  approval/report_builder.py) must surface this warning prominently whenever
+  this procedure_id is proposed — this is not a validated procedure, it is a
+  placeholder registry entry so the Patch Agent has something concrete to
+  reference instead of inventing RAC behavior. Do not run against a real RAC
+  cluster without treating it as first-of-its-kind, same bar as
+  docs/ROADMAP.md Phase 2's acceptance criterion for the single-instance path.

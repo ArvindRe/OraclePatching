@@ -1,0 +1,25 @@
+# Changelog:
+#   2026-09-22T15:53:48+05:30 — Initial sample knowledge object — Data Guard standby-first RU patch ordering — Arvind Regukumar
+
+id: data_guard_ru_patch_order
+title: "Data Guard-aware RU/CPU patch ordering (standby-first)"
+category: data_guard
+applicable_min_version: "19.0.0.0.0"
+applicable_max_version: "19.99.99.99.99"
+preconditions:
+  - "Confirm primary/standby redo apply lag is within an acceptable window (v$dataguard_stats, 'apply lag') before starting."
+  - "Confirm Broker (if used) is not mid-switchover/failover — check DGMGRL 'show configuration' status is SUCCESS."
+steps:
+  - "Patch the standby database's Oracle Home first, not the primary — this is the opposite order from a non-DG single-instance patch."
+  - "Standby stays in managed recovery / mounted while its Oracle Home is patched (opatchauto handles instance stop/start for the patch itself, not the DG role)."
+  - "Verify redo apply resumes and lag returns to baseline before touching the primary."
+  - "Only after the standby is confirmed healthy on the new patch level, patch the primary."
+  - "If using Data Guard Broker, verify 'show configuration' reports SUCCESS after each side completes, not just after both are done."
+validation:
+  - "dba_registry_sqlpatch shows SUCCESS on the standby before starting the primary."
+  - "v$dataguard_stats 'apply lag' returns to pre-patch baseline on the standby before starting the primary."
+  - "After the primary completes, re-verify apply lag and dba_registry_sqlpatch on both roles."
+rollback:
+  - "If the standby patch fails validation, do not proceed to the primary — the environment is still fully protected on the old patch level with the primary unpatched."
+  - "If the primary patch fails after the standby succeeded, the standby is still available as a valid failover target on the new patch level — this is an argument for standby-first, not just a convention."
+source: "Internal runbook (informed by standard Oracle Data Guard patching guidance) — not yet automated by roles/oracle_cpu_patch, which currently has no DG-role-aware ordering logic. See DB_PATCHING_SCOPE.md component 1 (scanner checks DG sync) and STATUS.md Open Issues."

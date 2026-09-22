@@ -1,0 +1,115 @@
+---
+# Changelog:
+#   2026-09-22T15:53:48+05:30 — Initial environment-scanning playbook (read-only) — Arvind Regukumar
+#   2026-09-22T15:53:48+05:30 — Fixed grid_home/crs_version_raw: default(omit) inside a nested dict literal doesn't actually omit the key (omit only works as a module arg's whole value) — verified via real Templar, switched to default('') — Arvind Regukumar
+
+# Read-only ground-truth scan for the agentic POC (DB_PATCHING_SCOPE.md component 1).
+# This is NEW, unreviewed automation living under Patching_Agentic/ — it does not
+# reuse roles/oracle_cpu_patch's tasks (those are patch-lifecycle tasks, this is
+# read-only inventory collection) and has not been run against a live host yet.
+# Treat it with the same "not proven" caveat as everything else in this scaffold
+# until it's exercised against vagrant/ or a real target, same bar as
+# docs/ROADMAP.md Phase 2 for the base repo.
+#
+# Requires -e cdbs=<list of {sid: ...}> — there is currently no inventory-level
+# var for "which CDBs exist on this host" independent of a specific patch (the
+# base repo's `cdbs` var lives in vars/patches/<patch_id>.yml, i.e. scoped to a
+# patch run, not to the host). Until an oracle_cdbs host/group var is added to
+# inventories/*/group_vars, callers must supply this explicitly.
+#
+# No ansible.builtin.command with become for CRS/GI check is run unless
+# grid_home is defined — RAC/GI is out of scope for what's actually verified
+# in this project (see registry/procedures/oracle_19c_rac_ru_patch.yml notes).
+
+- name: Oracle environment scan (read-only)
+  hosts: "{{ scan_target }}"
+  gather_facts: true
+
+  tasks:
+    - name: OPatch version
+      ansible.builtin.command:
+        argv: ["{{ oracle_home }}/OPatch/opatch", "version"]
+      become: true
+      become_user: "{{ oracle_os_owner }}"
+      environment:
+        ORACLE_HOME: "{{ oracle_home }}"
+      register: scan_opatch_version
+      changed_when: false
+
+    - name: OPatch lsinventory (full)
+      ansible.builtin.command:
+        argv: ["{{ oracle_home }}/OPatch/opatch", "lsinventory"]
+      become: true
+      become_user: "{{ oracle_os_owner }}"
+      environment:
+        ORACLE_HOME: "{{ oracle_home }}"
+      register: scan_lsinventory
+      changed_when: false
+
+    - name: Listener status
+      ansible.builtin.command:
+        argv: ["{{ oracle_home }}/bin/lsnrctl", "status"]
+      become: true
+      become_user: "{{ oracle_os_owner }}"
+      environment:
+        ORACLE_HOME: "{{ oracle_home }}"
+      register: scan_listener
+      changed_when: false
+      failed_when: false
+
+    - name: Per-CDB state (open mode, role, flashback, DG apply lag)
+      ansible.builtin.shell:
+        cmd: |
+          set -o pipefail
+          printf "set pages 0 feed off head off\nselect open_mode from v\\$database;\nselect status from v\\$instance;\nselect database_role from v\\$database;\nselect flashback_on from v\\$database;\nselect nvl((select value from v\\$dataguard_stats where name='apply lag'),'N/A') from dual;\nexit;\n" |
+            sqlplus -s / as sysdba
+        executable: /bin/bash
+      become: true
+      become_user: "{{ oracle_os_owner }}"
+      environment:
+        ORACLE_HOME: "{{ oracle_home }}"
+        ORACLE_SID: "{{ item.sid }}"
+        PATH: "{{ oracle_home }}/bin:/usr/bin:/bin"
+      register: scan_cdb_state
+      changed_when: false
+      loop: "{{ cdbs }}"
+      loop_control:
+        label: "{{ item.sid }}"
+
+    - name: CRS/ASM software version (only if grid_home is defined — RAC/GI, unverified path)
+      ansible.builtin.command:
+        argv: ["{{ grid_home }}/bin/crsctl", "query", "crs", "softwareversion"]
+      become: true
+      become_user: root
+      register: scan_crs_version
+      changed_when: false
+      failed_when: false
+      when: grid_home is defined
+
+    - name: Build per-CDB scan entries
+      ansible.builtin.set_fact:
+        scan_cdbs: "{{ (scan_cdbs | default([])) + [{'sid': item.item.sid, 'raw': item.stdout | default('')}] }}"
+      loop: "{{ scan_cdb_state.results }}"
+      loop_control:
+        label: "{{ item.item.sid }}"
+
+    - name: Emit structured scan result
+      ansible.builtin.set_fact:
+        scan_result:
+          host: "{{ inventory_hostname }}"
+          scanned_at: "{{ ansible_date_time.iso8601 }}"
+          os:
+            distribution: "{{ ansible_distribution }}"
+            distribution_version: "{{ ansible_distribution_version }}"
+            kernel: "{{ ansible_kernel }}"
+          oracle_home: "{{ oracle_home }}"
+          opatch_version: "{{ (scan_opatch_version.stdout_lines | default([])) | join(' ') }}"
+          lsinventory_raw: "{{ scan_lsinventory.stdout | default('') }}"
+          listener_raw: "{{ scan_listener.stdout | default('') }}"
+          grid_home: "{{ grid_home | default('') }}"
+          crs_version_raw: "{{ scan_crs_version.stdout | default('') }}"
+          cdbs: "{{ scan_cdbs | default([]) }}"
+
+    - name: Show scan result (captured by the JSON stdout callback)
+      ansible.builtin.debug:
+        var: scan_result

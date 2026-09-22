@@ -3,6 +3,7 @@
 #   2026-09-22T17:30:00+05:30 — Added a real client timeout + openai.APIError handling — a demo run got Ctrl-C'd while waiting on the LLM, and the orphaned request kept running server-side (llama.cpp's single -np 1 slot), blocking every subsequent call with no client-side signal anything was wrong. Without a timeout this call could hang indefinitely; now it fails closed into PatchAgentEscalationError like every other failure mode here — Arvind Regukumar
 #   2026-09-22T19:44:29+05:30 — Added explicit system-prompt guidance after observing a real hallucination: the model returned current_version="19.99.99.99.99" — a procedure's max_supported_version range boundary, not a real Oracle release — apparently copied from available_procedures in-context rather than read from scan data (which had no clean version field until scan_playbook.yml's version_full fix). Now explicitly tells the model where to read the real version from and that an empty string beats a fabricated one — Arvind Regukumar
 #   2026-09-22T20:02:32+05:30 — Found the fix above was aimed at the wrong source and didn't actually work — re-ran through demo.py itself (not just an isolated script) after the version_full fix and still got current_version="19.99.99.99.99". available_procedures never actually carried min/max_supported_version (checked the code); the real leak was retrieved_knowledge — every retrieved KnowledgeObject's applicable_min_version/applicable_max_version (same "19.0.0.0.0"/"19.99.99.99.99" on all 6 objects) was being serialized straight into the prompt. Fixed at the source: those fields are now stripped from the prompt payload in _build_user_prompt (they already did their job server-side in retrieve()'s filter; the model never needs to see them) — Arvind Regukumar
+#   2026-09-22T20:39:12+05:30 — Stopped trusting the model for current_version at all, after a third variant of the same unreliability (correct "19.3.0.0.0" on one run, "1.0" on the next, same scan data both times). It's now unconditionally overwritten with agents.scanner.scanner.extract_db_version(scan_result) after the response passes schema validation — a live database fact that doesn't need an LLM's help to know, so stop asking it to guess. target_version stays model-generated since it's a genuine judgment call (which patch this is upgrading TO) nothing in scan_result can answer — Arvind Regukumar
 
 """Proposes a PatchPlan. Never executes anything itself.
 
@@ -31,6 +32,7 @@ import jsonschema
 import openai
 from openai import OpenAI
 
+from agents.scanner.scanner import extract_db_version
 from config.settings import LLMSettings
 from registry.procedures.registry import ProcedureRegistry
 
@@ -45,16 +47,16 @@ commands, SQL, or file paths in any field. If the scan data or retrieved knowled
 is insufficient to confidently set a precondition to true, leave it false — false \
 is the safe default, not a guess.
 
-For current_version: read it from scan_result.cdbs[].raw — the last line of each \
-CDB's raw query output is that CDB's real, live version_full (e.g. "19.28.0.0.0"), \
-queried directly from v$instance. Use that exact string, and nothing else. Never use \
-a version-range boundary from anywhere else in this prompt (a procedure's supported \
-range, a knowledge object's applicable range, or any other min/max-shaped field) as a \
-stand-in for a real reading — "19.99.99.99.99" in particular is a range boundary, \
-never a real Oracle release. If scan_result has no readable version_full for any \
-reason, leave current_version as an empty string rather than guessing — an empty \
-string is a visible, honest signal to the human reviewing this plan; a plausible- \
-looking fake version is not."""
+current_version is verified independently after you respond — whatever you put there \
+gets overwritten with the real value read directly from scan_result, so don't spend \
+effort on it beyond returning a syntactically valid placeholder; it is not a field you \
+need to get right. target_version is different: it is not independently verified, \
+because it's a judgment call (which patch/version this plan is upgrading TO) that \
+nothing in this prompt can derive from a live reading alone. Never use a version-range \
+boundary from anywhere in this prompt (a procedure's supported range, a knowledge \
+object's applicable range, or any other min/max-shaped field) as a stand-in for \
+target_version — "19.99.99.99.99" in particular is a range boundary, never a real \
+Oracle release."""
 
 
 class PatchAgentEscalationError(RuntimeError):
@@ -153,6 +155,12 @@ def propose_plan(
             jsonschema.validate(plan, schema)
             # Belt and braces: re-check against the registry directly, not just the enum.
             registry.get(plan["procedure_id"])
+            # Never trust the model's self-reported current_version — proven unreliable
+            # live (correct on one run, "19.99.99.99.99" or "1.0"/"19c" on others, even
+            # with the real value present in scan_result to copy from). This is a fact
+            # about the live database, independently knowable without the model's help,
+            # so don't ask it to guess: overwrite with the real reading unconditionally.
+            plan["current_version"] = extract_db_version(scan_result) or ""
             return plan
         except (json.JSONDecodeError, jsonschema.ValidationError, KeyError) as exc:
             last_error = exc

@@ -88,21 +88,34 @@ which undermines the "fails closed with a clear reason" story the whole
 design is built around), then subprocess timeouts, then the postcheck
 STATUS gate (already on `STATUS.md`'s list for the base repo).
 
-**A limitation that isn't fixed, and can't be fixed by better error
-handling alone:** `qwen2.5:3b-instruct` is unreliable at the
-`current_version`/`target_version` fields specifically, even with a real,
-correctly-extracted version string available in `scan_result` to copy from.
-One observed run correctly returned `"19.3.0.0.0"`; the very next run
-returned `"1.0"` and `"19c"` for the same scan data. What's actually been
-fixed across today's incidents is that wrong output now fails safely
-(caught, audited, halted) instead of being silently trusted or crashing the
-process — not that the model reliably gets it right. That gap only closes
-with either a larger/better model (see `config/settings.yaml`'s note on
-this dev machine's 8GB RAM being the constraint) or moving version
-extraction out of the LLM's hands entirely — e.g., have the Executor read
-`current_version` directly from `scan_result` itself rather than trusting
-whatever the model echoes back, since the Executor already has that data
-independently and doesn't need to take the model's word for it.
+**A limitation that's now half-closed, not fully:** `qwen2.5:3b-instruct` is
+unreliable at the `current_version`/`target_version` fields, even with a
+real, correctly-extracted version string available in `scan_result` to copy
+from — one observed run correctly returned `"19.3.0.0.0"`; the very next run
+returned `"1.0"` and `"19c"` for the same scan data.
+
+**`current_version` — fixed, not just handled.** `agents/patch/patch_agent.py`
+now unconditionally overwrites `current_version` with
+`agents.scanner.scanner.extract_db_version(scan_result)` after the LLM
+responds, regardless of what it said — the model's own guess for this field
+is simply discarded. Verified live: a run where the model said `"1.0"`/`"19c"`
+still ended up with the correct `"19.3.0.0.0"` in the plan. This closes the
+gap for real, not just gracefully — `current_version` is now always
+accurate when `scan_result` has a readable version, and an honest empty
+string when it doesn't.
+
+**`target_version` — still open, and can't be closed the same way.** Nothing
+in `scan_result` can answer "which patch/version is this upgrading TO" — the
+model still has to produce this as a genuine judgment call. What's fixed
+(the crash-proofing in `executor.py`, see above) is that a bad
+`target_version` now fails safely — verified in the same live run:
+`target_version="19c"` hit the version-range gate and produced a clean
+`ExecutorHaltedError`, not a crash. Closing this gap for real (not just
+safely) needs either a larger/better model (see `config/settings.yaml`'s
+note on this dev machine's 8GB RAM being the constraint) or sourcing
+`target_version` from the specific patch's own metadata once a real patch
+exists (`ansible/vars/patches/<patch_id>.yml` — not built yet either, see
+question 4 above) rather than asking the LLM to infer it from context.
 
 ---
 
@@ -217,3 +230,4 @@ requirement, and never commit the staged zips themselves to git.
 - 2026-09-22T17:33:36+05:30 — Marked the LLM-hang and SSH/subprocess-timeout gaps as fixed — a real Ctrl-C'd demo run orphaned a stuck Ollama generation and hung the next call with no timeout to catch it; added real timeouts everywhere and a demo.py preflight step, verified live (killed Ollama, confirmed fail-fast) — Arvind Regukumar
 - 2026-09-22T20:06:10+05:30 — Added question 4: where do patches actually get staged, and does the same DMZ transfer pattern built for the knowledge base apply to them too — flagged as a real, currently-unaddressed gap (patch_zip_local_path just assumes the file already exists locally, no mechanism for how) with a recommendation not to build anything until the control node's network topology is actually decided — Arvind Regukumar
 - 2026-09-22T20:11:44+05:30 — Corrected the version-range row: it was actually a crash bug (malformed target_version "19c" from the LLM raised an unhandled ValueError), fixed and unit-tested. Added an explicit note that the underlying model-reliability problem (qwen2.5:3b-instruct is inconsistent at current_version/target_version even with real scan data available) is NOT fixed by any of today's error-handling work — only that wrong output now fails safely instead of crashing or being silently trusted — Arvind Regukumar
+- 2026-09-22T20:42:49+05:30 — Updated the model-reliability note: current_version is now genuinely fixed (patch_agent.py overwrites it with scan_result's real reading unconditionally, verified live), not just handled-when-wrong. target_version remains open since nothing in scan_result can answer it — Arvind Regukumar

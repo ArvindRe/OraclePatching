@@ -3,6 +3,7 @@
 #   2026-09-22T15:53:48+05:30 — Fixed env= replacing the whole subprocess environment instead of extending it (would have broken PATH/HOME); removed leftover dead loop — Arvind Regukumar
 #   2026-09-22T16:49:41+05:30 — Renamed base_repo_path param to ansible_dir and cwd — playbooks/roles/inventories/ansible.cfg moved under a new ansible/ subdirectory — Arvind Regukumar
 #   2026-09-22T17:30:00+05:30 — Added a real subprocess timeout (no timeout existed before) — Arvind Regukumar
+#   2026-09-22T20:39:12+05:30 — Added extract_db_version() — a shared, correct place to pull the real version out of scan_result, used by patch_agent.py to override the LLM's self-reported current_version rather than trusting it (the model proved unreliable at this field even with real data available — see patch_agent.py's changelog) — Arvind Regukumar
 
 """Runs scan_playbook.yml and returns its structured scan_result as a dict.
 
@@ -23,13 +24,36 @@ import json
 import os
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 _PLAYBOOK = Path(__file__).parent / "scan_playbook.yml"
+
+# Per-CDB raw query output is 6 lines, in the order scan_playbook.yml's SQL block
+# runs them: open_mode, status, database_role, flashback_on, dg_apply_lag,
+# version_full. Centralized here (rather than re-hardcoding "line index 5"
+# wherever scan_result gets consumed) since this module owns the format and
+# already has to change in lockstep with scan_playbook.yml's SQL.
+_CDB_RAW_VERSION_LINE_INDEX = 5
 
 
 class ScanFailedError(RuntimeError):
     pass
+
+
+def extract_db_version(scan_result: dict[str, Any]) -> Optional[str]:
+    """The real, live Oracle release version (v$instance.version_full), read
+    from the first CDB's raw scan output. Returns None if scan_result has no
+    CDBs or the raw output isn't the expected shape — callers must treat that
+    as "unknown," never fall back to guessing.
+    """
+    cdbs = scan_result.get("cdbs") or []
+    if not cdbs:
+        return None
+    lines = cdbs[0].get("raw", "").splitlines()
+    if len(lines) <= _CDB_RAW_VERSION_LINE_INDEX:
+        return None
+    version = lines[_CDB_RAW_VERSION_LINE_INDEX].strip()
+    return version or None
 
 
 def scan(ansible_dir: Path, inventory: str, scan_target: str, cdbs: list[dict[str, str]], timeout_seconds: float = 600) -> dict[str, Any]:

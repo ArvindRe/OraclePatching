@@ -2,6 +2,7 @@
 #   2026-09-22T15:53:48+05:30 — Initial RAG smoke test against real Qdrant (ingest -> version-aware retrieve) — Arvind Regukumar
 #   2026-09-22T17:33:36+05:30 — De-hardcoded the object/point count (was == 2, broke the moment RMAN/datapatch/RAC/ASM knowledge objects were added) — Arvind Regukumar
 #   2026-09-22T17:44:12+05:30 — Updated SAMPLE_DIR: sample_knowledge/ renamed to knowledge_staging/ (part of the new staging -> inbox DMZ-transfer-simulation boundary, see rag/ingestion/dmz_transfer.py) — Arvind Regukumar
+#   2026-09-22T20:46:44+05:30 — Added an explicit 30s timeout to the QdrantClient fixture — the default was too tight for this dev machine under real load (VM + Ollama + Postgres all running at once), causing a real ingest() upsert to time out, not just a connectivity blip — Arvind Regukumar
 
 """Requires a running Qdrant (docker compose up -d qdrant). Uses
 DeterministicTestEmbedder, not sentence-transformers — this test verifies the
@@ -28,7 +29,10 @@ SAMPLE_DIR = Path(__file__).parent.parent / "rag" / "knowledge_staging"
 @pytest.fixture
 def qdrant_client():
     qdrant_client_mod = pytest.importorskip("qdrant_client")
-    client = qdrant_client_mod.QdrantClient(host="localhost", port=6333)
+    # Explicit generous timeout — the client's default is too tight for a dev
+    # machine under real load (observed: QEMU + Ollama + Postgres all running
+    # at once caused real upsert() calls, not just connectivity, to time out).
+    client = qdrant_client_mod.QdrantClient(host="localhost", port=6333, timeout=30)
     try:
         client.get_collections()
     except Exception as exc:

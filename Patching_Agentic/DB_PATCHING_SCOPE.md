@@ -56,6 +56,52 @@ no other agent re-derives it independently.
 - **Ingestion:** monthly, via a one-directional DMZ transfer from a
   connected staging machine. The production server has no direct internet
   access.
+- **Content selection criteria** — what actually gets curated onto the
+  staging machine and transferred, not just "relevant Oracle docs":
+  1. **In-scope domain only.** Must map to one of the six named domains
+     above (19c / RAC / ASM / Data Guard / RMAN / OPatch) and to a
+     version this project targets (19c). Never EBS, never a different DB
+     version, regardless of how good the content is.
+  2. **Tied to something this codebase actually does or has flagged as a
+     gap**, not generic background reading. Preference order: (a) explains
+     a mechanism the automation directly relies on (e.g. `opatchauto -analyze`
+     as the real dry-run — `executor/ansible_runner.py` depends on this
+     being accurate), (b) closes a gap already named in `STATUS.md`/
+     `docs/OPEN_QUESTIONS.md` (e.g. RMAN backup validation, RAC rolling
+     order — both existed as flagged gaps before the matching knowledge
+     object did), (c) general reference otherwise. A knowledge base that's
+     encyclopedic but not actionable during a real patch run isn't the goal.
+  3. **Source credibility, tiered.** Prefer an official `docs.oracle.com`
+     page with a real citation. Where official docs are thin (common for
+     patching mechanics — Oracle's own docs describe *what* commands do,
+     rarely *why* an ordering or precondition matters), cross-check 2+
+     independent practitioner sources rather than trusting one blog post.
+     Never ingest a claim with no traceable source — every knowledge
+     object's `source` field must name where it actually came from, not
+     "general knowledge."
+  4. **Decomposes honestly into preconditions/steps/validation/rollback.**
+     If a source is pure narrative that can't be split that way without
+     distorting it, either restructure carefully by hand (verifying nothing
+     was lost) or don't ingest it as-is — don't force-fit prose into the
+     schema just to have more objects.
+  5. **Never reproduce licensed Oracle content verbatim** — patch READMEs,
+     MOS note text, etc. Summarize and cite; don't copy.
+- **What to monitor for new releases** — verified against Oracle's own
+  sources, not assumed: the **public, no-MOS-login** page
+  [oracle.com/security-alerts](https://www.oracle.com/security-alerts/) is
+  Oracle's official Critical Patch Update advisory index — CPUs (which
+  include the quarterly Database RU) are published there on the third
+  Tuesday of January, April, July, and October, with an email subscription
+  option. This is the right thing for a staging machine to poll/subscribe
+  to for "has a new quarterly RU shipped" *without* needing MOS access at
+  all — only the actual patch *download* is MOS-gated, not knowing that one
+  exists. Once MOS access exists, the DBA-facing patch-number lookup is MOS
+  Note 1454618.1 ("Quick Reference to Patch Numbers for Database PSU,
+  SPU(CPU), Bundle Patches and Patchsets") — the master index this
+  project's own knowledge objects should track, not something to duplicate.
+  `oracle-base.com`'s "Patching: Find the Required Patches for Oracle
+  Products" is a solid public supplementary reference (no MOS needed)
+  already used informally to source this repo's own knowledge objects.
 
 ### 3. Patch Agent
 Retrieves the applicable procedure from RAG, compares against the scan
@@ -152,4 +198,5 @@ given the schema-gated design keeps the LLM's job narrow.
 
 - 2026-09-22T15:28:39+05:30 — Initial version — Phase 1 POC scope for the agentic patching layer — Arvind Regukumar (timestamp from filesystem mtime; file predates git tracking and this project's per-file changelog convention)
 - 2026-09-22T15:53:48+05:30 — Brought under the per-file changelog convention; see [README.md](README.md) for the review findings (auto-rollback conflict resolved in favor of CLAUDE.md design decision #4) and build status against this scope — Arvind Regukumar
+- 2026-09-22T21:01:02+05:30 — Added explicit content-selection criteria for the Knowledge Base (formalizing what the 6 existing knowledge objects in rag/knowledge_staging/ actually followed) and verified, cited sources for tracking new patch releases — the public oracle.com/security-alerts CPU advisory page (no MOS login needed, quarterly on the third Tuesday of Jan/Apr/Jul/Oct) for knowing a release exists, MOS Note 1454618.1 for the DBA-facing patch-number lookup once MOS access exists — Arvind Regukumar
 

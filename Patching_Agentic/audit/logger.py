@@ -1,12 +1,13 @@
 # Changelog:
 #   2026-09-22T15:53:48+05:30 — Initial hash-chained append-only audit logger — Arvind Regukumar
 #   2026-09-22T15:53:48+05:30 — Added "snapshot" event type for executor/rollback/snapshot.py — Arvind Regukumar
+#   2026-09-22T16:49:41+05:30 — Updated roles/oracle_cpu_patch prose reference to ansible/roles/oracle_cpu_patch (Ansible content moved under a new ansible/ subdirectory) — Arvind Regukumar
 
 """Append-only, hash-chained audit log for the agentic patching POC.
 
 DB_PATCHING_SCOPE.md component 7 asks for "append-only / hash-chained," which is a
 step beyond the base OraclePatching repo's existing local JSON-lines audit log
-(roles/oracle_cpu_patch/tasks/audit_log.yml — see CLAUDE.md design decision #7).
+(ansible/roles/oracle_cpu_patch/tasks/audit_log.yml — see CLAUDE.md design decision #7).
 This logger is deliberately a *separate* file (settings.audit_log_path, default
 ~/.oracle_patching/agentic_audit.jsonl) rather than a rewrite of that one — the
 Ansible-native log covers every playbook invocation regardless of how it was

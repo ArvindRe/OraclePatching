@@ -1,9 +1,11 @@
 # Changelog:
 #   2026-09-22T15:53:48+05:30 — Initial end-to-end CLI: scan -> retrieve -> propose -> approve -> execute — Arvind Regukumar
+#   2026-09-22T16:49:41+05:30 — Updated for the ansible/ move: registry/scan/RunContext now use settings.ansible_dir, not settings.base_repo_path — Arvind Regukumar
+#   2026-09-22T17:30:00+05:30 — Threaded settings.subprocess_timeout_seconds through scan()/RunContext — Arvind Regukumar
 
 """CLI entry point wiring the full agentic pipeline together.
 
-    python run_patch.py --target dbhost01 --inventory ../inventories/vagrant_test/hosts.yml \\
+    python run_patch.py --target dbhost01 --inventory inventories/vagrant_test/hosts.yml \\
         --cdbs '[{"sid": "CDB1"}]' --oracle-os-owner oracle
 
 This is the only place all seven DB_PATCHING_SCOPE.md components meet. Every
@@ -40,7 +42,7 @@ from qdrant_client import QdrantClient
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--target", required=True, help="inventory hostname/alias to scan and (if approved) patch")
-    parser.add_argument("--inventory", required=True, help="path to an Ansible inventory (hosts.yml)")
+    parser.add_argument("--inventory", required=True, help="path to an Ansible inventory (hosts.yml), relative to ansible/ (e.g. inventories/vagrant_test/hosts.yml)")
     parser.add_argument("--cdbs", required=True, help='JSON list, e.g. \'[{"sid": "CDB1"}]\'')
     parser.add_argument("--oracle-os-owner", default="oracle")
     parser.add_argument("--category", default=None, help="optional RAG category filter, e.g. data_guard")
@@ -53,7 +55,7 @@ def main() -> int:
     audit = AuditLogger(settings.audit_log_path)
     started_at = datetime.now(timezone.utc)
 
-    registry = ProcedureRegistry.load(settings.procedures_dir, settings.base_repo_path)
+    registry = ProcedureRegistry.load(settings.procedures_dir, settings.ansible_dir)
 
     try:
         cdbs = json.loads(args.cdbs)
@@ -62,7 +64,7 @@ def main() -> int:
         return 2
 
     try:
-        scan_result = scan(settings.base_repo_path, args.inventory, args.target, cdbs)
+        scan_result = scan(settings.ansible_dir, args.inventory, args.target, cdbs, timeout_seconds=settings.subprocess_timeout_seconds)
     except ScanFailedError as exc:
         print(f"Scan failed: {exc}", file=sys.stderr)
         return 1
@@ -83,10 +85,11 @@ def main() -> int:
         return 1
 
     ctx = RunContext(
-        base_repo_path=settings.base_repo_path,
+        ansible_dir=settings.ansible_dir,
         inventory=args.inventory,
         target_host=args.target,
         oracle_os_owner=args.oracle_os_owner,
+        subprocess_timeout_seconds=settings.subprocess_timeout_seconds,
     )
 
     outcome = "FAILED"

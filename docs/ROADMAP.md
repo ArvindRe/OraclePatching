@@ -10,7 +10,7 @@ the "never tested against a live database" gap from
 
 ## Phase 1 — v1: Core CPU/PSU patching (done)
 
-**Deliverable:** `roles/oracle_cpu_patch` + three playbooks
+**Deliverable:** `ansible/roles/oracle_cpu_patch` + three playbooks
 (`cpu_patch_precheck.yml`, `cpu_patch_apply.yml`,
 `cpu_patch_rollback_info.yml`) covering stage → conflict-check → confirm
 gate → stop → apply → start → datapatch → postcheck for a single-instance
@@ -75,7 +75,7 @@ see phase 5.
 
 ## Phase 3 — Linux OS patching role
 
-**Deliverable:** `roles/linux_os_patch` — `yum`/`dnf` package updates,
+**Deliverable:** `ansible/roles/linux_os_patch` — `yum`/`dnf` package updates,
 kernel patch detection, reboot orchestration (`ansible.builtin.reboot`)
 with pre/post health checks, serialized so a multi-node cluster never has
 two nodes down for OS patching at once.
@@ -93,9 +93,9 @@ before/after `uname -r` and package-version diff.
 
 ## Phase 4 — Windows service management role
 
-**Deliverable:** `roles/windows_services` — WinRM-based start/stop of
+**Deliverable:** `ansible/roles/windows_services` — WinRM-based start/stop of
 named services via `ansible.windows.win_service`, a new
-`inventories/*/hosts.yml` `windows_hosts` group (`ansible_connection:
+`ansible/inventories/*/hosts.yml` `windows_hosts` group (`ansible_connection:
 winrm`), and a bootstrap doc for enabling WinRM on a target Windows Server
 that doesn't have it yet (this is usually the actual blocker in practice,
 not the Ansible side).
@@ -161,4 +161,5 @@ runbooks, with no undocumented tribal knowledge required.
 
 - 2026-09-15T23:04:48+05:30 — Initial version — 5-phase plan to production-ready — Arvind Regukumar
 - 2026-09-16T00:12:11+05:30 — Phase 1 acceptance criteria + Phase 5 updated for mandatory audit logging — Arvind Regukumar
+- 2026-09-22T16:49:41+05:30 — Updated path references for the new ansible/ subdirectory (playbooks/roles moved out of the repo root) — Arvind Regukumar
 

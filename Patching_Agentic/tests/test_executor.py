@@ -1,5 +1,7 @@
 # Changelog:
 #   2026-09-22T15:53:48+05:30 — Initial Executor orchestration tests (all branches, no live ansible/sqlplus needed) — Arvind Regukumar
+#   2026-09-22T16:49:41+05:30 — Renamed BASE_REPO_PATH to ANSIBLE_DIR and RunContext's base_repo_path field to ansible_dir, now pointing at the new ansible/ subdirectory — Arvind Regukumar
+#   2026-09-22T20:11:44+05:30 — Added test for a real crash found live (malformed target_version "19c" from the LLM crashed the whole process) — Arvind Regukumar
 
 """Exercises executor.run_patch_workflow's branches with ansible_runner/snapshot/
 approval calls monkeypatched out — the orchestration logic (registry gate,
@@ -23,19 +25,19 @@ from executor.rollback.snapshot import SnapshotResult
 from registry.procedures.registry import ProcedureRegistry
 
 SCAFFOLD_ROOT = Path(__file__).parent.parent
-BASE_REPO_PATH = (SCAFFOLD_ROOT / "..").resolve()
+ANSIBLE_DIR = (SCAFFOLD_ROOT / ".." / "ansible").resolve()
 PROCEDURES_DIR = SCAFFOLD_ROOT / "registry" / "procedures"
 
 
 @pytest.fixture
 def registry():
-    return ProcedureRegistry.load(PROCEDURES_DIR, BASE_REPO_PATH)
+    return ProcedureRegistry.load(PROCEDURES_DIR, ANSIBLE_DIR)
 
 
 @pytest.fixture
 def ctx():
     return RunContext(
-        base_repo_path=BASE_REPO_PATH,
+        ansible_dir=ANSIBLE_DIR,
         inventory="inventories/vagrant_test/hosts.yml",
         target_host="dbhost01",
         oracle_os_owner="oracle",
@@ -85,6 +87,24 @@ def test_version_out_of_range_halts_before_dry_run(registry, ctx, audit, monkeyp
         run_patch_workflow(_valid_plan(target_version="20.1.0.0.0"), ctx, registry, audit)
 
     assert called == []
+
+
+def test_malformed_version_halts_cleanly_instead_of_crashing(registry, ctx, audit, monkeypatch):
+    """Real incident: the LLM returned target_version="19c" and _version_in_range's
+    bare int() call crashed the whole process with an unhandled ValueError — no
+    audit entry, no clean halt. This must fail the same way an out-of-range
+    version does, not escape as a raw traceback."""
+    called = []
+    monkeypatch.setattr(executor_module.ansible_runner, "run_precheck", lambda *a, **k: called.append("precheck"))
+
+    with pytest.raises(ExecutorHaltedError, match="could not be parsed"):
+        run_patch_workflow(_valid_plan(target_version="19c"), ctx, registry, audit)
+
+    assert called == []
+    entries = audit.read_all()
+    assert entries[-1].event_type == "validation_result"
+    assert entries[-1].payload["ok"] is False
+    assert entries[-1].payload["stage"] == "version_range"
 
 
 def test_dry_run_failure_halts_before_snapshot(registry, ctx, audit, monkeypatch):

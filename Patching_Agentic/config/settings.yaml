@@ -1,5 +1,8 @@
 # Changelog:
 #   2026-09-22T15:53:48+05:30 — Initial POC settings (paths, Qdrant/Postgres, local LLM endpoint) — Arvind Regukumar
+#   2026-09-22T16:35:00+05:30 — Switched default llm.model to qwen2.5:3b-instruct — this dev machine has 8GB total RAM with 4GB reserved for the vagrant VM guest, not the 64GB POC server DB_PATCHING_SCOPE.md assumes; the 7b model would swap heavily alongside the VM. Revert to a 7b/larger model on real POC hardware — Arvind Regukumar
+#   2026-09-22T17:30:00+05:30 — Added llm.timeout_seconds/preflight_timeout_seconds and subprocess_timeout_seconds — a demo run got Ctrl-C'd mid LLM-call, orphaning a server-side generation that then hung every subsequent call with no client-side timeout to catch it — Arvind Regukumar
+#   2026-09-22T20:06:10+05:30 — Added preflight_vm_timeout_seconds (60s) — preflight_timeout_seconds (10s) was too tight for the VM/Ansible SSH check specifically; observed a real 52s ansible -m ping under load (VM + Qdrant + Postgres + Ollama all running on 8GB RAM), causing false-positive preflight failures — Arvind Regukumar
 
 # Path to the base OraclePatching repo this scaffold extends (playbooks, inventories,
 # vars/patches). Never duplicate those files here — always reference by path.
@@ -24,9 +27,40 @@ postgres:
 # air-gapped by design (see DB_PATCHING_SCOPE.md "Ingestion").
 llm:
   base_url: "http://localhost:11434/v1"
-  model: "qwen2.5:7b-instruct-q4_K_M"
+  model: "qwen2.5:3b-instruct"
   max_schema_retries: 2
   temperature: 0.1
+  # Ceiling on ONE real propose_plan() call — generous, since actual generation
+  # on constrained hardware can legitimately take a while. Not a connect
+  # timeout only — covers the whole request, so a server that accepts the TCP
+  # connection but then goes silent mid-generation still gets caught.
+  timeout_seconds: 120
+  # Ceiling for a demo.py-style quick health check — deliberately much
+  # shorter, since a preflight should fail fast, not wait as long as a real
+  # call is allowed to.
+  preflight_timeout_seconds: 10
+
+# Ceiling on ONE ansible-playbook / ansible ad hoc subprocess call
+# (executor/ansible_runner.py, agents/scanner/scanner.py,
+# executor/rollback/snapshot.py). Generous — real Oracle operations (patch
+# staging, opatchauto apply) can genuinely take minutes — but bounded, so a
+# hung SSH session fails with a clear message instead of blocking forever.
+subprocess_timeout_seconds: 600
+
+# Ceiling for demo.py's Step 0 preflight checks against Qdrant/Ollama/Postgres —
+# these are all fast local HTTP-style checks (<1s observed even under load),
+# so a real short timeout here is meaningful, not just aspirational.
+preflight_timeout_seconds: 10
+
+# Separate, longer ceiling for the VM/Ansible SSH preflight check specifically —
+# SSH connection setup + Ansible's own startup overhead is inherently slower than
+# a bare HTTP check, and got worse than 10s in practice on an 8GB dev machine
+# running the VM + Qdrant + Postgres + Ollama all at once (one real observed
+# case: 52s for a plain `ansible -m ping`, nothing actually wrong). 10s here
+# produced false-positive preflight failures; this doesn't defeat the "fail
+# fast" purpose, since a truly-down VM still fails within this, just not as
+# instantly as the other checks.
+preflight_vm_timeout_seconds: 60
 
 audit:
   log_path: "~/.oracle_patching/agentic_audit.jsonl"

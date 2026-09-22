@@ -1,10 +1,11 @@
 # Changelog:
 #   2026-09-22T15:53:48+05:30 — Initial registry entry, single-instance 19c RU/CPU patch — Arvind Regukumar
+#   2026-09-22T16:49:41+05:30 — Updated roles/oracle_cpu_patch prose reference to ansible/roles/oracle_cpu_patch (Ansible content moved under a new ansible/ subdirectory) — Arvind Regukumar
 
 procedure_id: oracle_19c_ru_patch
 description: >
   CPU/PSU (quarterly Release Update) patch of a single-instance or Oracle Restart
-  19c CDB via opatchauto/opatch, wrapping roles/oracle_cpu_patch end to end
+  19c CDB via opatchauto/opatch, wrapping ansible/roles/oracle_cpu_patch end to end
   (precheck/stage -> confirm gate -> stop -> apply -> start -> datapatch -> postcheck).
 target_type: single_instance
 min_supported_version: "19.0.0.0.0"

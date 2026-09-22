@@ -34,30 +34,38 @@ pattern), so the only credential Ansible needs is SSH access + `become`.
 
 ## Project structure
 
+All Ansible content lives under `ansible/` — `ansible.cfg`'s own defaults
+(`roles_path`, the example inventory) only resolve correctly when a tool's
+working directory is this folder, so every command below `cd`s into it first.
+
 ```
 OraclePatching/
-├── ansible.cfg
-├── inventories/
-│   └── example_client/        # copy per client — see docs/SCOPE.md "Multi-client model"
-│       ├── hosts.yml           # oracle_db_hosts group, one entry per DB host
-│       └── group_vars/oracle_db_hosts.yml
-├── playbooks/
-│   ├── cpu_patch_precheck.yml  # safe, read-only + stages the patch — run this first
-│   ├── cpu_patch_apply.yml     # the real thing — gated, see "Safety model"
-│   └── cpu_patch_rollback_info.yml  # prints the manual rollback procedure, executes nothing
-├── roles/oracle_cpu_patch/
-│   ├── defaults/main.yml       # full per-patch variable schema
-│   └── tasks/
-│       ├── main.yml            # dispatches: precheck -> stage -> [confirm gate] -> stop
-│       │                       #   -> apply -> start -> datapatch -> postcheck
-│       ├── precheck.yml        # OPatch version, existing inventory, free space
-│       ├── stage_patch.yml     # copy + unzip patch, conflict analysis (opatchauto -analyze)
-│       ├── apply_patch.yml     # opatchauto apply (or manual opatch apply), block/rescue
-│       ├── stop_services.yml / start_services.yml   # manual (non-opatchauto) path only
-│       ├── datapatch.yml       # SQL-level patch, per CDB
-│       ├── postcheck.yml       # opatch lsinventory + dba_registry_sqlpatch verification
-│       └── audit_log.yml       # writes one JSON-lines entry per run — see "Safety model"
-└── vars/patches/EXAMPLE_PATCH.yml   # copy per quarterly patch — patch_id, CDBs, zip path
+├── ansible/
+│   ├── ansible.cfg
+│   ├── inventories/
+│   │   └── example_client/        # copy per client — see docs/SCOPE.md "Multi-client model"
+│   │       ├── hosts.yml           # oracle_db_hosts group, one entry per DB host
+│   │       └── group_vars/oracle_db_hosts.yml
+│   ├── playbooks/
+│   │   ├── cpu_patch_precheck.yml  # safe, read-only + stages the patch — run this first
+│   │   ├── cpu_patch_apply.yml     # the real thing — gated, see "Safety model"
+│   │   └── cpu_patch_rollback_info.yml  # prints the manual rollback procedure, executes nothing
+│   ├── roles/oracle_cpu_patch/
+│   │   ├── defaults/main.yml       # full per-patch variable schema
+│   │   └── tasks/
+│   │       ├── main.yml            # dispatches: precheck -> stage -> [confirm gate] -> stop
+│   │       │                       #   -> apply -> start -> datapatch -> postcheck
+│   │       ├── precheck.yml        # OPatch version, existing inventory, free space
+│   │       ├── stage_patch.yml     # copy + unzip patch, conflict analysis (opatchauto -analyze)
+│   │       ├── apply_patch.yml     # opatchauto apply (or manual opatch apply), block/rescue
+│   │       ├── stop_services.yml / start_services.yml   # manual (non-opatchauto) path only
+│   │       ├── datapatch.yml       # SQL-level patch, per CDB
+│   │       ├── postcheck.yml       # opatch lsinventory + dba_registry_sqlpatch verification
+│   │       └── audit_log.yml       # writes one JSON-lines entry per run — see "Safety model"
+│   └── vars/patches/EXAMPLE_PATCH.yml   # copy per quarterly patch — patch_id, CDBs, zip path
+├── Patching_Agentic/           # LLM-assisted proposal layer on top of ansible/ — own README
+├── docs/                       # SCOPE, ROADMAP, architecture — see docs/CURRENT_ARCHITECTURE.md
+└── vagrant/                    # local Phase 2 test environment (kept out of GitHub)
 ```
 
 A local Vagrant+QEMU Phase 2 test environment (a real 19c CDB to run the
@@ -67,6 +75,8 @@ playbooks against) exists but is kept out of this repo — see
 ## Usage
 
 ```bash
+cd ansible
+
 # 1. Point at the right client's inventory (copy example_client/ first — see docs/SCOPE.md)
 cp -r inventories/example_client inventories/acme_corp
 vim inventories/acme_corp/hosts.yml
@@ -131,4 +141,5 @@ history you can read without `git log`, not a replacement for git itself.
 - 2026-09-15T23:57:13+05:30 — Removed direct references to the now-local-only vagrant/ path — Arvind Regukumar
 - 2026-09-16T00:12:11+05:30 — Documented mandatory audit logging in safety model + project structure — Arvind Regukumar
 - 2026-09-16T00:20:49+05:30 — Added "Versioning" section (per-file changelog convention) — Arvind Regukumar
+- 2026-09-22T16:49:41+05:30 — Moved ansible.cfg/inventories/playbooks/roles/vars under a new ansible/ subdirectory (grouped alongside the new Patching_Agentic/, docs/, vagrant/ top-level folders); updated project structure and usage commands accordingly — Arvind Regukumar
 

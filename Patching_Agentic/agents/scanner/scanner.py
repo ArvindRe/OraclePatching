@@ -1,6 +1,8 @@
 # Changelog:
 #   2026-09-22T15:53:48+05:30 — Initial scanner wrapper (runs scan_playbook.yml, parses JSON callback output) — Arvind Regukumar
 #   2026-09-22T15:53:48+05:30 — Fixed env= replacing the whole subprocess environment instead of extending it (would have broken PATH/HOME); removed leftover dead loop — Arvind Regukumar
+#   2026-09-22T16:49:41+05:30 — Renamed base_repo_path param to ansible_dir and cwd — playbooks/roles/inventories/ansible.cfg moved under a new ansible/ subdirectory — Arvind Regukumar
+#   2026-09-22T17:30:00+05:30 — Added a real subprocess timeout (no timeout existed before) — Arvind Regukumar
 
 """Runs scan_playbook.yml and returns its structured scan_result as a dict.
 
@@ -30,7 +32,7 @@ class ScanFailedError(RuntimeError):
     pass
 
 
-def scan(base_repo_path: Path, inventory: str, scan_target: str, cdbs: list[dict[str, str]]) -> dict[str, Any]:
+def scan(ansible_dir: Path, inventory: str, scan_target: str, cdbs: list[dict[str, str]], timeout_seconds: float = 600) -> dict[str, Any]:
     cmd = [
         "ansible-playbook",
         str(_PLAYBOOK),
@@ -42,14 +44,21 @@ def scan(base_repo_path: Path, inventory: str, scan_target: str, cdbs: list[dict
         json.dumps({"cdbs": cdbs}),
     ]
 
-    proc = subprocess.run(
-        cmd,
-        cwd=str(base_repo_path),
-        capture_output=True,
-        text=True,
-        check=False,
-        env={**os.environ, "ANSIBLE_STDOUT_CALLBACK": "json"},
-    )
+    try:
+        proc = subprocess.run(
+            cmd,
+            cwd=str(ansible_dir),
+            capture_output=True,
+            text=True,
+            check=False,
+            env={**os.environ, "ANSIBLE_STDOUT_CALLBACK": "json"},
+            timeout=timeout_seconds,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise ScanFailedError(
+            f"scan_playbook.yml timed out after {timeout_seconds}s for target '{scan_target}' (killed) — "
+            f"check whether the target host is reachable (SSH hang, VM stopped, network blip)."
+        ) from exc
 
     if proc.returncode != 0:
         raise ScanFailedError(

@@ -1,0 +1,21 @@
+# Changelog:
+#   2026-09-22T17:25:08+05:30 — Initial knowledge object — RAC rolling patch via opatchauto — Arvind Regukumar
+
+id: rac_rolling_patch_opatchauto
+title: "opatchauto rolling-mode RAC patching — one node at a time, cluster stays up"
+category: rac
+applicable_min_version: "19.0.0.0.0"
+applicable_max_version: "19.99.99.99.99"
+preconditions:
+  - "Grid Infrastructure is active on at least one remote node before starting — opatchauto cannot enter rolling patch mode otherwise (crsctl start rollingpatch fails if GI isn't up on a remote node to coordinate with)."
+  - "Confirm the specific patch is actually rollable — not every one-off/interim patch supports rolling application; the patch's own README states this. A non-rollable patch applied via rolling mode fails partway with the cluster stack down on some nodes and needs manual recovery (bring the stack down on ALL nodes, patch the rest manually per the README, bring the stack back up everywhere)."
+steps:
+  - "opatchauto apply <PATCH_LOCATION> — rolling mode is opatchauto's DEFAULT behavior for RAC, not an explicit flag you have to request."
+  - "opatchauto orchestrates one node at a time: pre-patch checks -> stop services on that node -> apply the binary patch -> start services on that node -> move to the next node. The cluster as a whole stays available throughout, unlike a non-rolling patch which needs the whole stack down."
+  - "One invocation of opatchauto can patch the GI home only, the RAC DB home(s) only, or both together, depending on -oh and other flags passed — this project's registry/procedures/oracle_19c_rac_ru_patch.yml notes this repo has no separate GI-specific task path yet, it reuses the same playbooks with grid_home set."
+validation:
+  - "crsctl query crs activeversion / crsctl query crs softwareversion on every node — confirm all nodes converged on the new version, not just the first one patched."
+  - "Same per-CDB dba_registry_sqlpatch STATUS check as the single-instance case, run against every instance in the cluster."
+rollback:
+  - "opatchauto rollback exists for the GI/RAC path specifically (see 'How to Rollback Oracle 19c Grid Infrastructure Patch Using OPatchAuto' pattern) — this project has never exercised it; per CLAUDE.md design decision #4, this repo's own stance stays 'rollback is never automated' regardless of what opatchauto itself supports — a human decides whether and when to invoke it."
+source: "https://docs.oracle.com/en/enterprise-manager/cloud-control/enterprise-manager-cloud-control/13.4/optch/manual-multi-node-patching-grid-infrastructure-and-rac-db-environment-using-opatchauto.html (Oracle Enterprise Manager Cloud Control, OPatchAuto multi-node RAC patching); cross-checked against practitioner guides (dohdatabase.com 'RAC rolling', dbainsight.com GI rollback walkthrough)"

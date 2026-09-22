@@ -1,5 +1,8 @@
 # Changelog:
 #   2026-09-22T15:53:48+05:30 — Initial Patch Agent (RAG retrieval + local LLM + schema-gated output) — Arvind Regukumar
+#   2026-09-22T17:30:00+05:30 — Added a real client timeout + openai.APIError handling — a demo run got Ctrl-C'd while waiting on the LLM, and the orphaned request kept running server-side (llama.cpp's single -np 1 slot), blocking every subsequent call with no client-side signal anything was wrong. Without a timeout this call could hang indefinitely; now it fails closed into PatchAgentEscalationError like every other failure mode here — Arvind Regukumar
+#   2026-09-22T19:44:29+05:30 — Added explicit system-prompt guidance after observing a real hallucination: the model returned current_version="19.99.99.99.99" — a procedure's max_supported_version range boundary, not a real Oracle release — apparently copied from available_procedures in-context rather than read from scan data (which had no clean version field until scan_playbook.yml's version_full fix). Now explicitly tells the model where to read the real version from and that an empty string beats a fabricated one — Arvind Regukumar
+#   2026-09-22T20:02:32+05:30 — Found the fix above was aimed at the wrong source and didn't actually work — re-ran through demo.py itself (not just an isolated script) after the version_full fix and still got current_version="19.99.99.99.99". available_procedures never actually carried min/max_supported_version (checked the code); the real leak was retrieved_knowledge — every retrieved KnowledgeObject's applicable_min_version/applicable_max_version (same "19.0.0.0.0"/"19.99.99.99.99" on all 6 objects) was being serialized straight into the prompt. Fixed at the source: those fields are now stripped from the prompt payload in _build_user_prompt (they already did their job server-side in retrieve()'s filter; the model never needs to see them) — Arvind Regukumar
 
 """Proposes a PatchPlan. Never executes anything itself.
 
@@ -25,6 +28,7 @@ from pathlib import Path
 from typing import Any
 
 import jsonschema
+import openai
 from openai import OpenAI
 
 from config.settings import LLMSettings
@@ -39,7 +43,18 @@ reference to a pre-vetted procedure_id and a summary of preconditions you evalua
 from the scan data and retrieved knowledge you were given. Never include shell \
 commands, SQL, or file paths in any field. If the scan data or retrieved knowledge \
 is insufficient to confidently set a precondition to true, leave it false — false \
-is the safe default, not a guess."""
+is the safe default, not a guess.
+
+For current_version: read it from scan_result.cdbs[].raw — the last line of each \
+CDB's raw query output is that CDB's real, live version_full (e.g. "19.28.0.0.0"), \
+queried directly from v$instance. Use that exact string, and nothing else. Never use \
+a version-range boundary from anywhere else in this prompt (a procedure's supported \
+range, a knowledge object's applicable range, or any other min/max-shaped field) as a \
+stand-in for a real reading — "19.99.99.99.99" in particular is a range boundary, \
+never a real Oracle release. If scan_result has no readable version_full for any \
+reason, leave current_version as an empty string rather than guessing — an empty \
+string is a visible, honest signal to the human reviewing this plan; a plausible- \
+looking fake version is not."""
 
 
 class PatchAgentEscalationError(RuntimeError):
@@ -61,10 +76,22 @@ def _build_user_prompt(scan_result: dict[str, Any], retrieval_hits: list[dict[st
         {"procedure_id": p.procedure_id, "description": p.description, "target_type": p.target_type}
         for p in registry
     ]
+    # applicable_min_version/applicable_max_version already did their job server-side
+    # in retrieve()'s version-range filter (rag/retrieval/retrieve.py) — the model
+    # doesn't need them and must never see them: they're filtering metadata, not a
+    # live version reading, but they're syntactically indistinguishable from one once
+    # they're sitting in the prompt. This was the actual, confirmed source of a real
+    # observed hallucination (current_version copied straight from a knowledge
+    # object's applicable_max_version, "19.99.99.99.99") — not available_procedures,
+    # which was wrongly suspected first and never actually carried these fields.
+    sanitized_hits = [
+        {k: v for k, v in hit.items() if k not in ("applicable_min_version", "applicable_max_version")}
+        for hit in retrieval_hits
+    ]
     return json.dumps(
         {
             "scan_result": scan_result,
-            "retrieved_knowledge": retrieval_hits,
+            "retrieved_knowledge": sanitized_hits,
             "available_procedures": procedure_summaries,
         },
         indent=2,
@@ -78,7 +105,18 @@ def propose_plan(
     llm: LLMSettings,
 ) -> dict[str, Any]:
     schema = _build_schema_with_enum(registry)
-    client = OpenAI(base_url=llm.base_url, api_key="not-needed-local-server")
+    # timeout: a real ceiling on however long ONE call is allowed to hang, not just a
+    # connect timeout — the openai SDK's default `timeout` covers the whole request
+    # (connect + read), which is exactly what's needed against a local model server
+    # that accepts the TCP connection immediately but can then sit silent mid-generation.
+    # max_retries=0: the SDK's own transport-level retry is redundant with (and would
+    # slow down) the schema-retry loop below; one clear timeout beats a hidden retry storm.
+    client = OpenAI(
+        base_url=llm.base_url,
+        api_key="not-needed-local-server",
+        timeout=llm.timeout_seconds,
+        max_retries=0,
+    )
 
     messages = [
         {"role": "system", "content": _SYSTEM_PROMPT},
@@ -87,15 +125,27 @@ def propose_plan(
 
     last_error: Exception | None = None
     for attempt in range(llm.max_schema_retries + 1):
-        response = client.chat.completions.create(
-            model=llm.model,
-            messages=messages,
-            temperature=llm.temperature,
-            response_format={
-                "type": "json_schema",
-                "json_schema": {"name": "patch_plan", "schema": schema, "strict": True},
-            },
-        )
+        try:
+            response = client.chat.completions.create(
+                model=llm.model,
+                messages=messages,
+                temperature=llm.temperature,
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {"name": "patch_plan", "schema": schema, "strict": True},
+                },
+            )
+        except openai.APITimeoutError as exc:
+            raise PatchAgentEscalationError(
+                f"LLM call to {llm.base_url} timed out after {llm.timeout_seconds}s — the model server may be "
+                f"stuck on an orphaned request from a prior run (e.g. a Ctrl-C'd demo.py doesn't cancel the "
+                f"server-side generation). Try restarting it (e.g. `brew services restart ollama`) before retrying."
+            ) from exc
+        except openai.APIConnectionError as exc:
+            raise PatchAgentEscalationError(
+                f"Could not reach LLM server at {llm.base_url}: {exc}. Is it running?"
+            ) from exc
+
         raw_content = response.choices[0].message.content
 
         try:

@@ -1,5 +1,6 @@
 # Changelog:
 #   2026-09-22T15:53:48+05:30 — Initial sample knowledge object — Data Guard standby-first RU patch ordering — Arvind Regukumar
+#   2026-09-22T16:49:41+05:30 — Updated roles/oracle_cpu_patch prose reference to ansible/roles/oracle_cpu_patch (Ansible content moved under a new ansible/ subdirectory) — Arvind Regukumar
 
 id: data_guard_ru_patch_order
 title: "Data Guard-aware RU/CPU patch ordering (standby-first)"
@@ -22,4 +23,4 @@ validation:
 rollback:
   - "If the standby patch fails validation, do not proceed to the primary — the environment is still fully protected on the old patch level with the primary unpatched."
   - "If the primary patch fails after the standby succeeded, the standby is still available as a valid failover target on the new patch level — this is an argument for standby-first, not just a convention."
-source: "Internal runbook (informed by standard Oracle Data Guard patching guidance) — not yet automated by roles/oracle_cpu_patch, which currently has no DG-role-aware ordering logic. See DB_PATCHING_SCOPE.md component 1 (scanner checks DG sync) and STATUS.md Open Issues."
+source: "Internal runbook (informed by standard Oracle Data Guard patching guidance) — not yet automated by ansible/roles/oracle_cpu_patch, which currently has no DG-role-aware ordering logic. See DB_PATCHING_SCOPE.md component 1 (scanner checks DG sync) and STATUS.md Open Issues."

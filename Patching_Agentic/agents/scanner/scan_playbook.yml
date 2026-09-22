@@ -2,10 +2,13 @@
 # Changelog:
 #   2026-09-22T15:53:48+05:30 — Initial environment-scanning playbook (read-only) — Arvind Regukumar
 #   2026-09-22T15:53:48+05:30 — Fixed grid_home/crs_version_raw: default(omit) inside a nested dict literal doesn't actually omit the key (omit only works as a module arg's whole value) — verified via real Templar, switched to default('') — Arvind Regukumar
+#   2026-09-22T16:35:00+05:30 — First live run against the vagrant VM found a real bug: the printf-piped per-CDB SQL query's \\$database escaping let the shell expand $database/$instance/etc. to empty before sqlplus ever saw them, truncating every query. Fixed with a quoted heredoc (<<'SQL'), which disables shell expansion entirely — confirmed against live CDB1 (READ WRITE / OPEN / PRIMARY / flashback off / no DG lag, all correct) — Arvind Regukumar
+#   2026-09-22T16:49:41+05:30 — Updated prose references to ansible/roles, ansible/vars/patches, ansible/inventories (Ansible content moved under a new ansible/ subdirectory) — Arvind Regukumar
+#   2026-09-22T19:44:29+05:30 — Added a 6th query (select version_full from v$instance) to the per-CDB SQL block — scan_result previously had no clean, structured DB version field, which the Patch Agent's small LLM was compensating for by hallucinating a version (observed copying a procedure's max_supported_version range boundary, "19.99.99.99.99", as if it were a real reading) — Arvind Regukumar
 
 # Read-only ground-truth scan for the agentic POC (DB_PATCHING_SCOPE.md component 1).
 # This is NEW, unreviewed automation living under Patching_Agentic/ — it does not
-# reuse roles/oracle_cpu_patch's tasks (those are patch-lifecycle tasks, this is
+# reuse ansible/roles/oracle_cpu_patch's tasks (those are patch-lifecycle tasks, this is
 # read-only inventory collection) and has not been run against a live host yet.
 # Treat it with the same "not proven" caveat as everything else in this scaffold
 # until it's exercised against vagrant/ or a real target, same bar as
@@ -13,9 +16,9 @@
 #
 # Requires -e cdbs=<list of {sid: ...}> — there is currently no inventory-level
 # var for "which CDBs exist on this host" independent of a specific patch (the
-# base repo's `cdbs` var lives in vars/patches/<patch_id>.yml, i.e. scoped to a
+# base repo's `cdbs` var lives in ansible/vars/patches/<patch_id>.yml, i.e. scoped to a
 # patch run, not to the host). Until an oracle_cdbs host/group var is added to
-# inventories/*/group_vars, callers must supply this explicitly.
+# ansible/inventories/*/group_vars, callers must supply this explicitly.
 #
 # No ansible.builtin.command with become for CRS/GI check is run unless
 # grid_home is defined — RAC/GI is out of scope for what's actually verified
@@ -59,10 +62,26 @@
 
     - name: Per-CDB state (open mode, role, flashback, DG apply lag)
       ansible.builtin.shell:
+        # Quoted heredoc ('SQL', not SQL) disables ALL shell expansion inside
+        # the body — no backslash-escaping of v$database/v$instance/etc.
+        # needed or wanted. An earlier version tried to escape each $ for a
+        # printf-piped one-liner and got it wrong (\\$ still let the shell
+        # expand $database to empty before printf ever saw it, silently
+        # truncating every query) — caught only by actually running this
+        # against a live CDB, not by --syntax-check or Templar rendering,
+        # since the bug was in shell-level expansion, not Jinja.
         cmd: |
           set -o pipefail
-          printf "set pages 0 feed off head off\nselect open_mode from v\\$database;\nselect status from v\\$instance;\nselect database_role from v\\$database;\nselect flashback_on from v\\$database;\nselect nvl((select value from v\\$dataguard_stats where name='apply lag'),'N/A') from dual;\nexit;\n" |
-            sqlplus -s / as sysdba
+          sqlplus -s / as sysdba <<'SQL'
+          set pages 0 feed off head off
+          select open_mode from v$database;
+          select status from v$instance;
+          select database_role from v$database;
+          select flashback_on from v$database;
+          select nvl((select value from v$dataguard_stats where name='apply lag'),'N/A') from dual;
+          select version_full from v$instance;
+          exit;
+          SQL
         executable: /bin/bash
       become: true
       become_user: "{{ oracle_os_owner }}"

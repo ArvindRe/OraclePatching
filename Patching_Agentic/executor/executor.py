@@ -1,5 +1,8 @@
 # Changelog:
 #   2026-09-22T15:53:48+05:30 — Initial Executor orchestration (registry -> dry-run -> snapshot -> approval -> apply -> validate), manual-only rollback — Arvind Regukumar
+#   2026-09-22T16:49:41+05:30 — Renamed RunContext.base_repo_path to ansible_dir (playbooks/roles/inventories/vars/ansible.cfg moved under a new ansible/ subdirectory) — Arvind Regukumar
+#   2026-09-22T17:30:00+05:30 — Added RunContext.subprocess_timeout_seconds, threaded through every ansible_runner/snapshot call — none of these had a timeout before; a hung SSH session would have blocked the whole workflow indefinitely — Arvind Regukumar
+#   2026-09-22T20:11:44+05:30 — Fixed a real crash found live: the LLM returned target_version="19c" (a hallucination, not "19.99.99.99.99" this time — that specific leak was fixed elsewhere, but the model is still generally unreliable at this field) and _version_in_range's int() call raised an unhandled ValueError, crashing the whole process with a traceback — no audit entry, no clean halt, the opposite of this module's entire "always fail closed" premise. Now catches the parse failure and turns it into the same ExecutorHaltedError + audit entry path as an out-of-range version — Arvind Regukumar
 
 """Orchestrates one patch run end to end.
 
@@ -43,17 +46,28 @@ class ExecutorHaltedError(RuntimeError):
 
 @dataclass(frozen=True)
 class RunContext:
-    base_repo_path: Path
+    ansible_dir: Path
     inventory: str
     target_host: str
     oracle_os_owner: str
+    subprocess_timeout_seconds: float = 600
+
+
+def _parse_version(v: str) -> tuple[int, ...]:
+    """Raises ValueError (with a message naming the actual bad value) on anything
+    that isn't a plain dotted-integer version string — e.g. an LLM-hallucinated
+    "19c" or "1.0". Callers must treat that the same as "out of range," not let
+    it propagate as an unhandled crash — a malformed version is exactly the kind
+    of bad LLM output this whole design exists to fail closed on, not choke on.
+    """
+    try:
+        return tuple(int(p) for p in v.split("."))
+    except ValueError:
+        raise ValueError(f"'{v}' is not a valid dotted-integer version string") from None
 
 
 def _version_in_range(version: str, min_v: str, max_v: str) -> bool:
-    def as_tuple(v: str) -> tuple[int, ...]:
-        return tuple(int(p) for p in v.split("."))
-
-    return as_tuple(min_v) <= as_tuple(version) <= as_tuple(max_v)
+    return _parse_version(min_v) <= _parse_version(version) <= _parse_version(max_v)
 
 
 def run_patch_workflow(
@@ -70,7 +84,14 @@ def run_patch_workflow(
         audit.append("validation_result", {"stage": "registry_lookup", "ok": False, "reason": str(exc)})
         raise ExecutorHaltedError(str(exc)) from exc
 
-    if not _version_in_range(plan["target_version"], procedure.min_supported_version, procedure.max_supported_version):
+    try:
+        in_range = _version_in_range(plan["target_version"], procedure.min_supported_version, procedure.max_supported_version)
+    except ValueError as exc:
+        reason = f"target_version {plan['target_version']!r} could not be parsed as a version: {exc}"
+        audit.append("validation_result", {"stage": "version_range", "ok": False, "reason": reason})
+        raise ExecutorHaltedError(reason) from exc
+
+    if not in_range:
         reason = (
             f"target_version {plan['target_version']} outside procedure "
             f"{procedure.procedure_id}'s supported range "
@@ -81,7 +102,7 @@ def run_patch_workflow(
 
     # --- Dry-run: the real precheck/stage playbook, real conflict analysis ---
     dry_run = ansible_runner.run_precheck(
-        ctx.base_repo_path, procedure.precheck_playbook, ctx.inventory, extra_vars={}
+        ctx.ansible_dir, procedure.precheck_playbook, ctx.inventory, extra_vars={}, timeout_seconds=ctx.subprocess_timeout_seconds
     )
     audit.append(
         "dry_run_result",
@@ -94,7 +115,7 @@ def run_patch_workflow(
 
     # --- Guaranteed restore point: creation only, never used to auto-restore ---
     snapshot = create_guaranteed_restore_point(
-        ctx.base_repo_path, ctx.inventory, ctx.target_host, ctx.oracle_os_owner, plan["procedure_id"]
+        ctx.ansible_dir, ctx.inventory, ctx.target_host, ctx.oracle_os_owner, plan["procedure_id"], ctx.subprocess_timeout_seconds
     )
     audit.append(
         "snapshot",
@@ -129,12 +150,13 @@ def run_patch_workflow(
 
     # --- Apply ---
     apply_result = ansible_runner.run_apply(
-        ctx.base_repo_path,
+        ctx.ansible_dir,
         procedure.apply_playbook,
         ctx.inventory,
         extra_vars={},
         confirm_var_name=procedure.confirm_var_name,
         patch_id=plan["procedure_id"],
+        timeout_seconds=ctx.subprocess_timeout_seconds,
     )
     audit.append(
         "execution_output",
@@ -143,7 +165,7 @@ def run_patch_workflow(
 
     if not apply_result.ok:
         rollback_info = ansible_runner.run_rollback_info(
-            ctx.base_repo_path, procedure.rollback_info_playbook, ctx.inventory, extra_vars={}
+            ctx.ansible_dir, procedure.rollback_info_playbook, ctx.inventory, extra_vars={}, timeout_seconds=ctx.subprocess_timeout_seconds
         )
         audit.append(
             "validation_result",

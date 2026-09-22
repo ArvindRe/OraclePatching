@@ -22,11 +22,11 @@ OPatch/opatchauto.**
 - A hard, patch-number-specific confirmation gate before anything
   state-changing runs.
 - A printed (not automated) manual rollback procedure.
-- Multi-client inventory isolation (one `inventories/<client>/` folder per
+- Multi-client inventory isolation (one `ansible/inventories/<client>/` folder per
   client — see "Multi-client model" below).
 - **A mandatory local audit log entry for every invocation** — see
   "Audit logging" below. Not optional, not tag-gated: every run of
-  `roles/oracle_cpu_patch`, success or failure, precheck-only or full
+  `ansible/roles/oracle_cpu_patch`, success or failure, precheck-only or full
   apply, writes exactly one entry.
 
 ## Explicitly out of scope — v1
@@ -50,7 +50,7 @@ for a finished product:
 
 ## Audit logging
 
-**Every invocation of `roles/oracle_cpu_patch` writes exactly one audit log
+**Every invocation of `ansible/roles/oracle_cpu_patch` writes exactly one audit log
 entry — this is not optional and does not depend on tags.** Wired into
 `main.yml` via `block`/`rescue`/`always`, so it fires whether the run
 succeeds, fails partway, or is refused at the confirm gate.
@@ -95,10 +95,10 @@ succeeds, fails partway, or is refused at the confirm gate.
 
 ## Multi-client model
 
-Each client gets its own `inventories/<client>/` directory (hosts +
-group_vars) copied from `inventories/example_client/`, keeping host lists
+Each client gets its own `ansible/inventories/<client>/` directory (hosts +
+group_vars) copied from `ansible/inventories/example_client/`, keeping host lists
 and any client-specific overrides from bleeding across engagements. Patch
-definitions (`vars/patches/<patch_id>.yml`) are shared across clients when
+definitions (`ansible/vars/patches/<patch_id>.yml`) are shared across clients when
 the patch number is the same — the host list, not the patch content, is
 what's client-specific. See [ROADMAP.md](ROADMAP.md) phase 5 for where
 this model needs to firm up further (secrets isolation, audit logging per
@@ -125,4 +125,5 @@ client) before it's genuinely multi-tenant-safe.
 
 - 2026-09-15T23:04:48+05:30 — Initial version — v1 in/out-of-scope table, assumptions, risk notes — Arvind Regukumar
 - 2026-09-16T00:12:11+05:30 — Added "Audit logging" section; moved audit logging out of the out-of-scope table — Arvind Regukumar
+- 2026-09-22T16:49:41+05:30 — Updated path references for the new ansible/ subdirectory (inventories/playbooks/roles/vars moved out of the repo root) — Arvind Regukumar
 

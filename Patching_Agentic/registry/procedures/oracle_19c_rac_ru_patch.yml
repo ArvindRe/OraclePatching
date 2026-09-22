@@ -1,10 +1,11 @@
 # Changelog:
 #   2026-09-22T15:53:48+05:30 — Initial registry entry, RAC/GI 19c RU/CPU patch (unverified path) — Arvind Regukumar
+#   2026-09-22T16:49:41+05:30 — Updated roles/oracle_cpu_patch prose reference to ansible/roles/oracle_cpu_patch (Ansible content moved under a new ansible/ subdirectory) — Arvind Regukumar
 
 procedure_id: oracle_19c_rac_ru_patch
 description: >
   CPU/PSU (quarterly Release Update) patch of a RAC/Grid-Infrastructure-integrated
-  19c CDB. Wraps the same roles/oracle_cpu_patch sequence as
+  19c CDB. Wraps the same ansible/roles/oracle_cpu_patch sequence as
   oracle_19c_ru_patch, using the inventory's grid_home var — NOT a separate
   RAC-specific task path (none exists yet).
 

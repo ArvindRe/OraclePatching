@@ -1,0 +1,20 @@
+# Changelog:
+#   2026-09-22T17:25:08+05:30 — Initial knowledge object — RMAN backup validation before a patch apply — Arvind Regukumar
+
+id: rman_backup_validation_before_patch
+title: "RMAN RESTORE...VALIDATE as the pre-patch backup-usability check"
+category: rman
+applicable_min_version: "19.0.0.0.0"
+applicable_max_version: "19.99.99.99.99"
+preconditions:
+  - "A recent RMAN backup exists (base repo's own gap — STATUS.md notes no backup-verification precheck task exists yet; this object is reference knowledge for when that gate gets built, not automation itself)."
+steps:
+  - "Do not just confirm a backup ran — confirm it is actually restorable. 'BACKUP VALIDATE' and 'VALIDATE' catch corruption in files/backups; only 'RESTORE ... VALIDATE' actually simulates a real restore (same read path as a real restore, but writes no output files)."
+  - "RESTORE DATABASE VALIDATE;"
+  - "RESTORE ARCHIVELOG ALL VALIDATE;"
+  - "For logical (not just physical) corruption checking, add the CHECK LOGICAL option to the validate command — physical-only checks (the default) catch invalid checksums, all-zero blocks, and mismatched headers/footers, but not row-piece or index-entry corruption."
+validation:
+  - "No RMAN error output (in particular no RMAN-06026, which indicates a piece needed for the restore was not found) — absence of errors is the pass signal, RMAN does not print an explicit 'VALIDATE PASSED' banner."
+rollback:
+  - "N/A — VALIDATE reads backup pieces/image copies but writes no output files; it cannot itself damage anything."
+source: "https://docs.oracle.com/en/database/oracle/oracle-database/19/bradv/validating-database-files-backups.html (Oracle 19c Backup and Recovery User's Guide, 'Validating Database Files and Backups')"

@@ -1,5 +1,6 @@
 # Changelog:
 #   2026-09-22T15:53:48+05:30 — Initial embedder interface + sentence-transformers implementation — Arvind Regukumar
+#   2026-09-22T17:39:21+05:30 — Switched to get_embedding_dimension() — get_sentence_embedding_dimension() is deprecated as of sentence-transformers 6.1.0 (confirmed installed version has the new method before switching) — Arvind Regukumar
 
 """Embedding interface for RAG ingestion/retrieval.
 
@@ -32,7 +33,7 @@ class SentenceTransformerEmbedder:
         from sentence_transformers import SentenceTransformer  # deferred: heavy import
 
         self._model = SentenceTransformer(model_name)
-        self.dimension = self._model.get_sentence_embedding_dimension()
+        self.dimension = self._model.get_embedding_dimension()
 
     def embed(self, text: str) -> list[float]:
         return self._model.encode(text, normalize_embeddings=True).tolist()

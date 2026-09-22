@@ -1,5 +1,6 @@
 # Changelog:
 #   2026-09-22T15:53:48+05:30 — Initial registry allow-list tests (load, dangling playbook, unknown procedure) — Arvind Regukumar
+#   2026-09-22T16:49:41+05:30 — Renamed BASE_REPO_PATH to ANSIBLE_DIR, now pointing at the new ansible/ subdirectory — Arvind Regukumar
 
 from __future__ import annotations
 
@@ -11,19 +12,19 @@ import yaml
 from registry.procedures.registry import ProcedureRegistry, UnknownProcedureError
 
 SCAFFOLD_ROOT = Path(__file__).parent.parent
-BASE_REPO_PATH = (SCAFFOLD_ROOT / "..").resolve()
+ANSIBLE_DIR = (SCAFFOLD_ROOT / ".." / "ansible").resolve()
 PROCEDURES_DIR = SCAFFOLD_ROOT / "registry" / "procedures"
 
 
 def test_loads_real_registry_against_real_playbooks():
-    registry = ProcedureRegistry.load(PROCEDURES_DIR, BASE_REPO_PATH)
+    registry = ProcedureRegistry.load(PROCEDURES_DIR, ANSIBLE_DIR)
     assert "oracle_19c_ru_patch" in registry
     assert "oracle_19c_rac_ru_patch" in registry
     assert len(registry) == 2
 
 
 def test_unknown_procedure_id_raises():
-    registry = ProcedureRegistry.load(PROCEDURES_DIR, BASE_REPO_PATH)
+    registry = ProcedureRegistry.load(PROCEDURES_DIR, ANSIBLE_DIR)
     with pytest.raises(UnknownProcedureError):
         registry.get("procedure_the_llm_made_up")
 
@@ -47,7 +48,7 @@ def test_dangling_playbook_reference_fails_to_load(tmp_path):
         )
     )
     with pytest.raises(FileNotFoundError):
-        ProcedureRegistry.load(bad_dir, BASE_REPO_PATH)
+        ProcedureRegistry.load(bad_dir, ANSIBLE_DIR)
 
 
 def test_unknown_precondition_key_rejected(tmp_path):
@@ -69,7 +70,7 @@ def test_unknown_precondition_key_rejected(tmp_path):
         )
     )
     with pytest.raises(Exception):  # pydantic.ValidationError
-        ProcedureRegistry.load(bad_dir, BASE_REPO_PATH)
+        ProcedureRegistry.load(bad_dir, ANSIBLE_DIR)
 
 
 def test_procedure_id_must_match_filename(tmp_path):
@@ -91,4 +92,4 @@ def test_procedure_id_must_match_filename(tmp_path):
         )
     )
     with pytest.raises(ValueError):
-        ProcedureRegistry.load(bad_dir, BASE_REPO_PATH)
+        ProcedureRegistry.load(bad_dir, ANSIBLE_DIR)

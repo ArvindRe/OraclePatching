@@ -2,7 +2,7 @@
 
 Full-stack scaffold for [DB_PATCHING_SCOPE.md](DB_PATCHING_SCOPE.md)'s Phase 1 POC:
 an LLM-assisted layer sitting on top of the base [OraclePatching](..) repo's
-`roles/oracle_cpu_patch` playbooks, with a hard rule everything here is built
+`ansible/roles/oracle_cpu_patch` playbooks, with a hard rule everything here is built
 around — **the LLM never has execution authority.** It only ever proposes a
 `procedure_id` from an allow-listed registry; the Executor is what actually
 runs anything, and only by looking that id up.
@@ -31,9 +31,9 @@ runs anything, and only by looking that id up.
 
 | Path | Component (DB_PATCHING_SCOPE.md #) | Status |
 |---|---|---|
-| `agents/scanner/` | 1. Environment Scanning Agent | Playbook written, Jinja verified via real `Templar`, **never run against a live host** |
+| `agents/scanner/` | 1. Environment Scanning Agent | **Run against the live vagrant VM (2026-09-22)** — correctly returned OPatch version, lsinventory, listener status, per-CDB state matching known VM state. Found/fixed 2 real bugs along the way (SSH key path, SQL `$`-expansion — see below) |
 | `rag/ingestion/`, `rag/retrieval/` | 2. Knowledge Base (RAG) | Real Qdrant ingestion/retrieval, smoke-tested against a live container (`tests/test_rag_smoke.py`); Postgres operational store smoke-tested too (`tests/test_operational_store_smoke.py`) |
-| `agents/patch/` | 3. Patch Agent | Real OpenAI-compatible client + two-layer schema gate (JSON-schema `enum` + registry re-check), **never called against a real local LLM** (no model server running in this environment) |
+| `agents/patch/` | 3. Patch Agent | **Run against a real local LLM (2026-09-22)** — Ollama + `qwen2.5:3b-instruct`, real `response_format: json_schema` call. Correctly picked an allow-listed `procedure_id`; output quality otherwise limited as expected from a 3B model (see below) |
 | `registry/procedures/` | 4. Procedure Registry | Real, unit-tested (`tests/test_registry.py`) — allow-list enforced at load time (dangling playbook path fails the whole registry load, not just that entry) |
 | `executor/` | 5. Executor | Real orchestration, fully unit-tested branch-by-branch (`tests/test_executor.py`), **never run against a live host** — dry-run is the real `opatchauto -analyze`/`opatch prereq` conflict analysis (via the existing precheck playbook), not `ansible-playbook --check` (see `executor/ansible_runner.py` docstring for why that distinction matters) |
 | `approval/` | 6. Human Approval Gate | Real report builder + blocking CLI confirmation, reuses the base repo's "type the exact value" pattern (target_version here, `confirm_patch` downstream) |
@@ -58,9 +58,17 @@ runs anything, and only by looking that id up.
 - A knowledge object (`rag/ingestion/sample_knowledge/data_guard_ru_patch_order.yml`)
   was added specifically to encode a gap flagged during review: the original
   scope doc checked Data Guard sync but never specified *patch ordering*
-  (standby-first) — the base repo's `roles/oracle_cpu_patch` still has no
+  (standby-first) — the base repo's `ansible/roles/oracle_cpu_patch` still has no
   DG-role-aware ordering logic; this is retrieved knowledge for now, not
   automated behavior.
+- First live run found two more real bugs, neither catchable statically:
+  `ansible/inventories/vagrant_test/group_vars/oracle_db_hosts.yml`'s SSH key path
+  was `{{ playbook_dir }}`-relative, which broke specifically for
+  `scan_playbook.yml` (three directories deep vs. `ansible/playbooks/*.yml`'s one) —
+  fixed to `{{ inventory_dir }}`-relative. And `scan_playbook.yml`'s per-CDB
+  SQL task's `printf "...v\\$database..."` one-liner let the shell expand
+  `$database` etc. to empty before `sqlplus` ever saw it — fixed with a
+  quoted heredoc (`<<'SQL'`). Full writeup: `../docs/CURRENT_ARCHITECTURE.md`.
 
 ## Quickstart (this dev machine)
 
@@ -69,17 +77,81 @@ cd Patching_Agentic
 python3.11 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
-# Bring up Qdrant + Postgres
-POSTGRES_PASSWORD=<choose one> docker compose up -d
+# One-time: create .env (gitignored, never committed) with a real generated
+# password — deliberately not a "<placeholder>" to edit by hand, since that's
+# exactly the kind of line that gets copy-pasted verbatim and silently breaks
+# auth later. docker-compose.yml auto-loads it; nothing else does — see below.
+echo "POSTGRES_PASSWORD=$(openssl rand -hex 16)" > .env
+
+# Bring up Qdrant + Postgres (reads .env automatically)
+docker compose up -d
+
+# Load .env into this shell too — pytest/demo.py/run_patch.py read
+# POSTGRES_PASSWORD from the environment directly, not from .env
+set -a && source .env && set +a
 
 # Unit tests (no infra needed) + smoke tests (need the containers above)
-POSTGRES_PASSWORD=<same one> pytest tests/ -v
+pytest tests/ -v
 ```
 
-`run_patch.py` additionally needs a local OpenAI-compatible LLM server
-(Ollama or llama.cpp, see `config/settings.yaml`'s `llm.base_url`) — not set
-up in this environment. Until one exists, `agents/patch/patch_agent.py` is
-exercised by unit test only for its schema-gating logic, not end-to-end.
+If you ever forget the password: it's whatever's in `.env` (gitignored,
+local to this machine) — but note that changing `.env` does **not** change
+an already-running container's actual Postgres password, since that's only
+set once, at first `initdb`. To pick up a new value you'd need
+`docker compose down -v && docker compose up -d` (the `-v` drops the data
+volume too).
+
+`run_patch.py` additionally needs a local OpenAI-compatible LLM server —
+this dev machine has Ollama running (`brew services start ollama`,
+`qwen2.5:3b-instruct` pulled; sized down from the originally-configured 7B
+model because this machine has 8GB total RAM, not the 64GB
+`DB_PATCHING_SCOPE.md` assumes — see `config/settings.yaml`'s changelog).
+
+## Run the live demo
+
+`demo.py` opens with a **Step 0 preflight** (VM/Ansible SSH, Qdrant, Ollama,
+Postgres — each with a short bounded timeout) that fails fast with a clear
+message if anything required isn't responding, then runs an 8-step narrated
+walkthrough (live scan → DMZ transfer simulation → RAG ingestion/retrieval →
+LLM proposal → registry rejection → Executor fails-safe → audit tamper
+detection → test suite) — real calls against the real vagrant
+VM/Qdrant/Postgres/Ollama, no mocks. Requires the vagrant VM up
+(`cd ../vagrant && vagrant up`, then start `CDB1`/the listener manually —
+see `STATUS.md` "Open Issues"), the Quickstart setup above, and Ollama
+running. Must be run from a real terminal (not piped/non-interactive) unless
+you pass `--auto`.
+
+**Every run writes a full transcript** to
+`demo_logs/demo_<local timestamp>.log` (e.g. `demo_20260922T202713.log`)
+(gitignored, local only) in addition to printing live — the path is printed
+first thing, and again in the closing summary. Added after a real incident:
+a Ctrl-C'd run orphaned a stuck generation on Ollama's single request slot
+(`llama-server -np 1`), which then hung every subsequent LLM call with no
+client-side timeout to catch it and nothing to diagnose it from afterward.
+Fixed two ways: (1) the LLM client, and every `ansible-playbook`/`ansible`
+subprocess call, now has a real timeout (`config/settings.yaml`'s
+`llm.timeout_seconds` / `subprocess_timeout_seconds`) and fails into a clean
+error instead of hanging; (2) Step 0 catches exactly this case up front —
+verified live by stopping Ollama and confirming the preflight fails in
+under a second with a message pointing at `brew services restart ollama`.
+
+```bash
+cd Patching_Agentic
+source .venv/bin/activate
+set -a && source .env && set +a
+
+# Paced — pauses after each step, press Enter to continue
+python demo.py
+
+# Or runs straight through, no pauses
+python demo.py --auto
+```
+
+(Trailing `# comment`s after a command only work as shown in `bash`. In an
+interactive `zsh` session — the macOS default, prompt ending in `%` — `#`
+doesn't start a comment unless `setopt interactivecomments` is set, so a
+trailing comment gets passed to the command as a literal argument instead
+of being stripped. Comments on their own line, as above, work in both.)
 
 ## What this is not
 
@@ -95,3 +167,11 @@ sandbox could actually reach" — not as a production readiness claim.
 ## Changelog
 
 - 2026-09-22T15:53:48+05:30 — Initial version — full 7-component scaffold, quickstart, known gaps found during build — Arvind Regukumar
+- 2026-09-22T16:40:35+05:30 — First live validation: scanner run against the vagrant VM, Patch Agent run against a real local Ollama model — both successful, 2 more real bugs found/fixed along the way — Arvind Regukumar
+- 2026-09-22T16:49:41+05:30 — Updated path references for the new ansible/ subdirectory (playbooks/roles/inventories/vars moved out of the repo root) — Arvind Regukumar
+- 2026-09-22T17:05:16+05:30 — Added "Run the live demo" section — demo.py existed but was never documented here — Arvind Regukumar
+- 2026-09-22T17:08:37+05:30 — Added a local .env (gitignored) for POSTGRES_PASSWORD, auto-loaded by docker-compose.yml — previously the password only existed in ad hoc shell history, nowhere durable. Updated Quickstart and Run-the-demo commands to `source .env` instead of retyping it — Arvind Regukumar
+- 2026-09-22T17:33:36+05:30 — Documented demo.py's new Step 0 preflight and timestamped log-file output, added after a real hang incident (orphaned Ollama generation, no timeout anywhere to catch it) — Arvind Regukumar
+- 2026-09-22T17:43:59+05:30 — Fixed a real footgun: `echo "POSTGRES_PASSWORD=<choose one>" > .env` got copy-pasted literally, overwriting a working .env with the placeholder text and breaking Postgres auth. Replaced with `$(openssl rand -hex 16)` so the command produces a real usable password with no manual substitution step to get wrong — Arvind Regukumar
+- 2026-09-22T20:27:16+05:30 — Corrected the demo log filename format doc: local system time with a numeric UTC offset, not UTC — Arvind Regukumar
+- 2026-09-22T20:29:23+05:30 — Dropped the UTC offset suffix from the demo log filename doc — local time only — Arvind Regukumar

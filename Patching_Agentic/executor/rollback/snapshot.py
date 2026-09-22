@@ -1,5 +1,7 @@
 # Changelog:
 #   2026-09-22T15:53:48+05:30 — Initial RMAN guaranteed restore point capture (creation only, never auto-restore) — Arvind Regukumar
+#   2026-09-22T16:49:41+05:30 — Renamed base_repo_path param to ansible_dir (playbooks/roles/inventories/vars/ansible.cfg moved under ansible/) — Arvind Regukumar
+#   2026-09-22T17:30:00+05:30 — Added a real subprocess timeout (no timeout existed before) — Arvind Regukumar
 
 """Creates an RMAN guaranteed restore point before a patch apply.
 
@@ -10,7 +12,7 @@ IMPORTANT — what this module does and does not do:
   (drop it later if unused) — it is preparation, not rollback. Per the
   reviewed design decision, actually rolling back stays entirely manual and
   human-initiated, same as CLAUDE.md design decision #4 and
-  playbooks/cpu_patch_rollback_info.yml. This module's output is handed to a
+  ansible/playbooks/cpu_patch_rollback_info.yml. This module's output is handed to a
   human as one more option alongside the RMAN backup / rollback procedure
   that playbook prints — it does not replace them.
 
@@ -27,7 +29,7 @@ IMPORTANT — what this module does and does not do:
 - Uses `ansible <host> -m ansible.builtin.shell` as a one-off ad hoc command
   (not a checked-in playbook) specifically because this is new, unreviewed
   functionality for this POC — it should graduate into a real
-  roles/oracle_cpu_patch task once proven, not be treated as equivalent to
+  ansible/roles/oracle_cpu_patch task once proven, not be treated as equivalent to
   the human-reviewed playbooks it currently sits alongside.
 """
 
@@ -68,11 +70,12 @@ class SnapshotResult:
 
 
 def create_guaranteed_restore_point(
-    base_repo_path: Path,
+    ansible_dir: Path,
     inventory: str,
     target_host: str,
     oracle_os_owner: str,
     patch_id: str,
+    timeout_seconds: float,
 ) -> SnapshotResult:
     name = restore_point_name(patch_id)
 
@@ -96,13 +99,22 @@ def create_guaranteed_restore_point(
         oracle_os_owner,
     ]
 
-    proc = subprocess.run(
-        cmd,
-        cwd=str(base_repo_path),
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        proc = subprocess.run(
+            cmd,
+            cwd=str(ansible_dir),
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=timeout_seconds,
+        )
+    except subprocess.TimeoutExpired:
+        return SnapshotResult(
+            restore_point=name,
+            returncode=-1,
+            stdout="",
+            stderr=f"restore point creation timed out after {timeout_seconds}s (killed) — check target host reachability",
+        )
     return SnapshotResult(
         restore_point=name,
         returncode=proc.returncode,

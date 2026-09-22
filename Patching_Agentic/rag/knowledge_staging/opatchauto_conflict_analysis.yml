@@ -1,5 +1,6 @@
 # Changelog:
 #   2026-09-22T15:53:48+05:30 — Initial sample knowledge object — opatchauto conflict analysis as the real dry-run — Arvind Regukumar
+#   2026-09-22T16:49:41+05:30 — Updated roles/oracle_cpu_patch prose reference to ansible/roles/oracle_cpu_patch (Ansible content moved under a new ansible/ subdirectory) — Arvind Regukumar
 
 id: opatchauto_conflict_analysis
 title: "opatchauto -analyze / opatch prereq as the real pre-apply dry-run"
@@ -7,7 +8,7 @@ category: opatch
 applicable_min_version: "19.0.0.0.0"
 applicable_max_version: "19.99.99.99.99"
 preconditions:
-  - "Patch zip already staged and unzipped on the target host (roles/oracle_cpu_patch/tasks/stage_patch.yml)."
+  - "Patch zip already staged and unzipped on the target host (ansible/roles/oracle_cpu_patch/tasks/stage_patch.yml)."
   - "OPatch itself meets the patch's minimum required OPatch version (checked in precheck.yml)."
 steps:
   - "Run 'opatchauto apply <patch_dir> -analyze' (or 'opatch prereq CheckConflictAgainstOHWithDetail' for the manual path) before the real apply."
@@ -17,4 +18,4 @@ validation:
   - "Exit code 0 and no 'Conflicts' section reporting blocking conflicts in the output."
 rollback:
   - "N/A — this step makes no changes to the Oracle Home; nothing to roll back."
-source: "Oracle OPatch documentation + this project's own roles/oracle_cpu_patch/tasks/stage_patch.yml, which already implements this. See the Executor build review that flagged conflating this with 'ansible-playbook --check'."
+source: "Oracle OPatch documentation + this project's own ansible/roles/oracle_cpu_patch/tasks/stage_patch.yml, which already implements this. See the Executor build review that flagged conflating this with 'ansible-playbook --check'."

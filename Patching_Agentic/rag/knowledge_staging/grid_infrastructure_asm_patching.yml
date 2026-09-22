@@ -1,0 +1,20 @@
+# Changelog:
+#   2026-09-22T17:25:08+05:30 — Initial knowledge object — Grid Infrastructure / ASM patching considerations — Arvind Regukumar
+
+id: grid_infrastructure_asm_patching
+title: "ASM patches ride with Grid Infrastructure — there is no separate 'patch ASM' step"
+category: asm
+applicable_min_version: "19.0.0.0.0"
+applicable_max_version: "19.99.99.99.99"
+preconditions:
+  - "ASM runs inside the Grid Infrastructure home, not a separate Oracle Home — there is no distinct 'ASM Oracle Home' to point opatchauto at. Patching GI patches the ASM instance as a side effect, not as an independent target."
+  - "Individual (one-off) ASM patches, when they exist, are still applied via opatchauto against the GI home — same mechanism as the quarterly RU, not a separate ASM-specific tool."
+steps:
+  - "opatchauto apply <PATCH_LOCATION> -oh <grid_home> patches Grid Infrastructure (and therefore ASM) specifically; -oh <db_home>, or omitting -oh with both present, determines whether the DB home, GI home, or both get patched in the same invocation."
+  - "Same rolling-vs-non-rolling distinction as rac_rolling_patch_opatchauto.yml applies here — ASM/GI patch orchestration is the same opatchauto engine, not a separate one."
+validation:
+  - "crsctl query crs softwareversion — confirms the clusterware (and therefore ASM) software version, not a SQL-level check the way dba_registry_sqlpatch is for the DB side."
+  - "asmcmd showclusterstate, or checking ASM instance status via srvctl status asm, to confirm the ASM instance actually came back up cleanly after the patched GI home restarted it."
+rollback:
+  - "N/A at this reference-knowledge level — GI/ASM rollback follows the same opatchauto rollback mechanism noted in rac_rolling_patch_opatchauto.yml, and the same CLAUDE.md design decision #4 stance (human-initiated only) applies."
+source: "https://docs.oracle.com/en/database/oracle/oracle-database/21/cwhpx/applying-patches-to-oracle-asm.html (Oracle 21c Grid Infrastructure documentation, 'Applying Patches to Oracle ASM') — this page is thin on rolling/non-rolling detail on its own; cross-checked against rac_rolling_patch_opatchauto.yml's sourcing for the orchestration mechanics, since ASM patching uses the identical opatchauto engine as RAC DB-home patching."

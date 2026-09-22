@@ -1,0 +1,22 @@
+# Changelog:
+#   2026-09-22T17:25:08+05:30 — Initial knowledge object — datapatch behavior across CDB/PDB — Arvind Regukumar
+
+id: datapatch_cdb_pdb_behavior
+title: "datapatch's CDB/PDB behavior and why closed PDBs get silently skipped"
+category: opatch
+applicable_min_version: "19.0.0.0.0"
+applicable_max_version: "19.99.99.99.99"
+preconditions:
+  - "opatch/opatchauto binary-level patch already applied — datapatch applies the SQL-level half of a patch, it does not touch the Oracle binaries."
+  - "The CDB instance is open, ORACLE_SID/ORACLE_HOME point at it — no separate invocation needed per PDB."
+steps:
+  - "cd $ORACLE_HOME/OPatch"
+  - "./datapatch -verbose"
+  - "datapatch walks CDB$ROOT and every currently OPEN pluggable database automatically in one invocation — this matches ansible/roles/oracle_cpu_patch/tasks/datapatch.yml's own comment that no pdbs loop is needed."
+  - "A PDB that is CLOSED (or in MOUNTED/MIGRATE state) at the moment datapatch runs is silently skipped, not failed — no error, no warning that it was left behind."
+validation:
+  - "SELECT patch_id, patch_type, status FROM cdb_registry_sqlpatch; — or dba_registry_sqlpatch from within a specific container — cross-check STATUS='SUCCESS' for CDB$ROOT AND every PDB expected to be patched, not just CDB$ROOT."
+  - "Any PDB that was closed during the datapatch run needs a SEPARATE datapatch invocation after it's opened — it will not retroactively pick up the fix on its own."
+rollback:
+  - "N/A at this reference-knowledge level — see the base repo's cpu_patch_rollback_info.yml for the actual manual rollback procedure; datapatch itself supports a rollback mode but this project has never exercised it (see STATUS.md)."
+source: "Practitioner consensus across multiple 19c patching guides (Dbvisit Support 'Applying 19c Release Updates'; oracledbwr.com; geodatamaster.com 'Oracle PDB and when is datapatch required') — not a single Oracle-official page, cross-checked against ansible/roles/oracle_cpu_patch/tasks/datapatch.yml's own comment about not looping pdbs."

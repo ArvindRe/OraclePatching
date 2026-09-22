@@ -1,5 +1,6 @@
 # Changelog:
 #   2026-09-22T15:53:48+05:30 — Initial procedure registry loader — Arvind Regukumar
+#   2026-09-22T16:49:41+05:30 — Renamed base_repo_path param to ansible_dir — playbook paths (e.g. "playbooks/cpu_patch_precheck.yml") now resolve against the new ansible/ subdirectory, not the repo root — Arvind Regukumar
 
 """Loads and validates the allow-listed procedure registry.
 
@@ -32,7 +33,7 @@ class ProcedureRegistry:
         self._procedures = procedures
 
     @classmethod
-    def load(cls, procedures_dir: Path, base_repo_path: Path) -> "ProcedureRegistry":
+    def load(cls, procedures_dir: Path, ansible_dir: Path) -> "ProcedureRegistry":
         procedures: dict[str, ProcedureDefinition] = {}
 
         for yml_path in sorted(procedures_dir.glob("*.yml")):
@@ -47,11 +48,11 @@ class ProcedureRegistry:
 
             for field in ("precheck_playbook", "apply_playbook", "rollback_info_playbook"):
                 rel_path = getattr(definition, field)
-                full_path = base_repo_path / rel_path
+                full_path = ansible_dir / rel_path
                 if not full_path.is_file():
                     raise FileNotFoundError(
                         f"{yml_path}: {field} '{rel_path}' does not exist under "
-                        f"{base_repo_path} — refusing to load a registry with a "
+                        f"{ansible_dir} — refusing to load a registry with a "
                         f"dangling procedure reference"
                     )
 

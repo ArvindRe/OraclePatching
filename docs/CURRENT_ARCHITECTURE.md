@@ -1,6 +1,6 @@
 # Current Architecture
 
-> Snapshot as of 2026-09-22. This is a point-in-time architecture reference —
+> Snapshot as of 2026-09-23. This is a point-in-time architecture reference —
 > for the live, evolving handoff (what's next, open issues), see
 > [STATUS.md](../STATUS.md). For phase gates, see [ROADMAP.md](ROADMAP.md).
 
@@ -36,6 +36,8 @@ ansible/playbooks/cpu_patch_rollback_info.yml ┘
 ```
 block:
   precheck.yml        # OPatch version, existing-patch check, free space
+  backup_check.yml     # RMAN whole-database backup verification gate,
+                        # opt-in RESTORE VALIDATE (verify_backup_restorable)
   stage_patch.yml      # copy/unzip patch zip, real conflict analysis
                         # (opatchauto -analyze / opatch prereq)
   [run_full_patch gate — structurally cannot proceed past here unless true]
@@ -44,7 +46,8 @@ block:
   apply_patch.yml       # opatchauto apply (default) or manual opatch apply
   start_services.yml   # manual path only
   datapatch.yml         # SQL-level patch, once per CDB
-  postcheck.yml          # opatch lsinventory + dba_registry_sqlpatch check
+  postcheck.yml          # opatch lsinventory + cdb_registry_sqlpatch check,
+                          # hard-fails (assert) on any non-SUCCESS status
 rescue:
   # capture failing task's message/stderr
 always:
@@ -74,7 +77,8 @@ rationale. Load-bearing ones:
 | `cpu_patch_precheck.yml` against a live 19c CDB | ✅ Ran successfully through OPatch check → free-space assert → staging (2026-09-16) |
 | `cpu_patch_apply.yml` (the actual patch) against a live CDB | ❌ **Never run** — no real patch downloaded yet (see STATUS.md "Open Issues") |
 | RAC / Grid Infrastructure path | ❌ Accepted as a var (`grid_home`), never exercised |
-| Backup-verification gate | ❌ Does not exist yet |
+| Backup-verification gate (`backup_check.yml`) | ✅ Built, verified live against the VM (2026-09-22); opt-in RESTORE VALIDATE step added and live-verified 2026-09-23 |
+| Postcheck STATUS gate hard-fails on real failure | ✅ Fixed 2026-09-23 — see "Real bugs found" below |
 
 ---
 
@@ -199,6 +203,16 @@ anything itself. Locked in by
    live CDB — no static check would have found this, since it's shell-level
    expansion, not Jinja or YAML. Fixed with a quoted heredoc (`<<'SQL'`),
    which disables shell expansion inside the body entirely.
+6. `postcheck.yml` queried `DBA_REGISTRY_SQLPATCH`, which only ever reports
+   the status of the *currently connected container* — with this project's
+   plain `/ as sysdba` connection (no `ALTER SESSION SET CONTAINER`), that's
+   `CDB$ROOT` only. It was structurally blind to every PDB, not merely the
+   already-known "informational-only, `debug`-not-`failed_when`" gap it was
+   found while fixing. Switched to `CDB_REGISTRY_SQLPATCH` (has a `CON_ID`
+   spanning every container) joined to `v$pdbs`, and replaced the `debug`
+   with a hard `assert` per container. Verified via real `Templar` across 3
+   cases and live against the VM before being considered fixed — same
+   discipline as every other bug in this list.
 
 Pattern worth naming: **every bug found so far was invisible to
 `--syntax-check` and `Templar` rendering** — they only surfaced by actually
@@ -246,3 +260,4 @@ database. See STATUS.md "Next Actions" for the current priority order.
 - 2026-09-22T16:37:52+05:30 — Initial version — full architecture snapshot covering both layers, data flow, component map, validation status, and the 5 real bugs found so far — Arvind Regukumar
 - 2026-09-22T16:49:41+05:30 — Updated path references for the new ansible/ subdirectory (playbooks/roles/inventories/vars moved out of the repo root, grouped alongside Patching_Agentic/, docs/, vagrant/) — Arvind Regukumar
 - 2026-09-22T17:39:21+05:30 — Documented the production Qdrant collection now being populated with real, sourced knowledge objects (real semantic retrieval verified) — Arvind Regukumar
+- 2026-09-23T00:59:18+05:30 — Refreshed against 2026-09-23's real code changes, found stale via a full-repo markdown audit: added backup_check.yml to the task-flow diagram (it existed in code since 2026-09-22 but was never added here), corrected postcheck.yml's description from dba_registry_sqlpatch to cdb_registry_sqlpatch + noted it now hard-fails, flipped the Backup-verification-gate validation-status row from "does not exist yet" (false — it existed since 2026-09-22) to built/verified, added a Postcheck-hard-fail row, and added bug #6 (the DBA_REGISTRY_SQLPATCH→CDB_REGISTRY_SQLPATCH fix) to the bug list — Arvind Regukumar

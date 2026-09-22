@@ -56,11 +56,13 @@ OraclePatching/
 │   │       ├── main.yml            # dispatches: precheck -> stage -> [confirm gate] -> stop
 │   │       │                       #   -> apply -> start -> datapatch -> postcheck
 │   │       ├── precheck.yml        # OPatch version, existing inventory, free space
+│   │       ├── backup_check.yml    # RMAN backup-verification gate, opt-in RESTORE VALIDATE
 │   │       ├── stage_patch.yml     # copy + unzip patch, conflict analysis (opatchauto -analyze)
 │   │       ├── apply_patch.yml     # opatchauto apply (or manual opatch apply), block/rescue
 │   │       ├── stop_services.yml / start_services.yml   # manual (non-opatchauto) path only
 │   │       ├── datapatch.yml       # SQL-level patch, per CDB
-│   │       ├── postcheck.yml       # opatch lsinventory + dba_registry_sqlpatch verification
+│   │       ├── postcheck.yml       # opatch lsinventory + cdb_registry_sqlpatch verification,
+│   │       │                       #   hard-fails on any non-SUCCESS status
 │   │       └── audit_log.yml       # writes one JSON-lines entry per run — see "Safety model"
 │   └── vars/patches/EXAMPLE_PATCH.yml   # copy per quarterly patch — patch_id, CDBs, zip path
 ├── Patching_Agentic/           # LLM-assisted proposal layer on top of ansible/ — own README
@@ -77,7 +79,7 @@ playbooks against) exists but is kept out of this repo — see
 ```bash
 cd ansible
 
-# 1. Point at the right client's inventory (copy example_client/ first — see docs/SCOPE.md)
+# 1. Point at the right client inventory (copy example_client/ first — see docs/SCOPE.md)
 cp -r inventories/example_client inventories/acme_corp
 vim inventories/acme_corp/hosts.yml
 
@@ -142,4 +144,6 @@ history you can read without `git log`, not a replacement for git itself.
 - 2026-09-16T00:12:11+05:30 — Documented mandatory audit logging in safety model + project structure — Arvind Regukumar
 - 2026-09-16T00:20:49+05:30 — Added "Versioning" section (per-file changelog convention) — Arvind Regukumar
 - 2026-09-22T16:49:41+05:30 — Moved ansible.cfg/inventories/playbooks/roles/vars under a new ansible/ subdirectory (grouped alongside the new Patching_Agentic/, docs/, vagrant/ top-level folders); updated project structure and usage commands accordingly — Arvind Regukumar
+- 2026-09-22T22:59:02+05:30 — Fixed a real bug: the Usage block's "client's inventory" comment has an apostrophe, which hangs an interactive zsh paste (unterminated quote, confirmed live) — reworded to avoid it. See Patching_Agentic/README.md for the full root-cause writeup — Arvind Regukumar
+- 2026-09-23T00:59:18+05:30 — Found stale via a full-repo markdown audit: added the missing backup_check.yml entry to the project-structure tree, and corrected postcheck.yml's description from dba_registry_sqlpatch to cdb_registry_sqlpatch (now hard-fails on non-SUCCESS, not just verifies) — Arvind Regukumar
 

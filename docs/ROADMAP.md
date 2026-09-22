@@ -48,16 +48,18 @@ close that before anything here touches a client.
   uses for its own script testing.
 - A real (even if old/superseded) CPU patch applied successfully against
   that test environment, with `postcheck.yml` confirming
-  `dba_registry_sqlpatch` shows `SUCCESS`.
+  `cdb_registry_sqlpatch` shows `SUCCESS` for every open container.
 - RAC-aware task path: verify (or fix) `opatchauto`'s multi-node behavior
   when invoked from one node of a cluster; add whatever `-rolling`/
   `-nonrolling` flag handling turns out to be needed.
 - Grid Infrastructure path: exercise `grid_home` for a GI-integrated patch,
   not just a DB-only one.
-- **Backup verification gate**: a precheck task that confirms a recent RMAN
-  backup exists (e.g., queries `v$rman_backup_job_details` for a completion
-  within N hours) and refuses to proceed without one, override-able only
-  with an explicit `-e skip_backup_check=true`.
+- ~~**Backup verification gate**~~ **Done, 2026-09-22** — precheck now
+  queries `v$rman_backup_job_details` per CDB and refuses to proceed
+  without a recent whole-database backup, override-able only with an
+  explicit `-e skip_backup_check=true`. Verified live against the vagrant
+  VM (correctly refuses with no backup, correctly proceeds when
+  overridden). See `docs/SCOPE.md` "Backup verification gate" for detail.
 - Automated OPatch-updater remediation: if `precheck.yml` finds OPatch
   below the patch's minimum required version, offer (not force) an
   `opatch_updater_zip` var path to apply it as part of `stage_patch.yml`.
@@ -162,4 +164,6 @@ runbooks, with no undocumented tribal knowledge required.
 - 2026-09-15T23:04:48+05:30 — Initial version — 5-phase plan to production-ready — Arvind Regukumar
 - 2026-09-16T00:12:11+05:30 — Phase 1 acceptance criteria + Phase 5 updated for mandatory audit logging — Arvind Regukumar
 - 2026-09-22T16:49:41+05:30 — Updated path references for the new ansible/ subdirectory (playbooks/roles moved out of the repo root) — Arvind Regukumar
+- 2026-09-22T21:20:35+05:30 — Marked Phase 2's backup-verification gate deliverable done, verified live — Arvind Regukumar
+- 2026-09-23T00:59:18+05:30 — Found stale via a full-repo markdown audit: corrected the Phase 2 acceptance criterion from dba_registry_sqlpatch to cdb_registry_sqlpatch, per postcheck.yml's fix (the old view was structurally blind to every PDB) — Arvind Regukumar
 

@@ -78,9 +78,9 @@ python3.11 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
 # One-time: create .env (gitignored, never committed) with a real generated
-# password — deliberately not a "<placeholder>" to edit by hand, since that's
+# password — deliberately not a "<placeholder>" to edit by hand, since this is
 # exactly the kind of line that gets copy-pasted verbatim and silently breaks
-# auth later. docker-compose.yml auto-loads it; nothing else does — see below.
+# auth later. docker-compose.yml auto-loads it; nothing else does, see below.
 echo "POSTGRES_PASSWORD=$(openssl rand -hex 16)" > .env
 
 # Bring up Qdrant + Postgres (reads .env automatically)
@@ -147,11 +147,21 @@ python demo.py
 python demo.py --auto
 ```
 
-(Trailing `# comment`s after a command only work as shown in `bash`. In an
-interactive `zsh` session — the macOS default, prompt ending in `%` — `#`
-doesn't start a comment unless `setopt interactivecomments` is set, so a
-trailing comment gets passed to the command as a literal argument instead
-of being stripped. Comments on their own line, as above, work in both.)
+(**The durable fix, do this once:** add `setopt interactivecomments` to your
+`~/.zshrc`. In an interactive `zsh` session — the macOS default, prompt
+ending in `%` — `#` does not start a comment at all without it, trailing
+*or* on its own line, and every code block in every doc that uses `#` is
+affected, not just this repo's. Confirmed two distinct failure modes
+directly (not assumed): without the option, a *harmless* `#` comment line
+still throws a visible `zsh: command not found: #` for each one (annoying,
+non-fatal, the real commands after it still run); but if the comment text
+happens to contain an apostrophe, it is far worse — that apostrophe opens
+an unterminated quote zsh will wait on forever (`quote>` prompt), silently
+swallowing every subsequent line until you Ctrl-C. A real comment reading
+"...since that's exactly..." hung a paste exactly this way, reproduced and
+fixed here by removing the apostrophe — but that is a per-comment patch,
+not a real fix; `setopt interactivecomments` is the one that actually
+closes the whole class, everywhere, permanently.)
 
 ## What this is not
 
@@ -175,3 +185,4 @@ sandbox could actually reach" — not as a production readiness claim.
 - 2026-09-22T17:43:59+05:30 — Fixed a real footgun: `echo "POSTGRES_PASSWORD=<choose one>" > .env` got copy-pasted literally, overwriting a working .env with the placeholder text and breaking Postgres auth. Replaced with `$(openssl rand -hex 16)` so the command produces a real usable password with no manual substitution step to get wrong — Arvind Regukumar
 - 2026-09-22T20:27:16+05:30 — Corrected the demo log filename format doc: local system time with a numeric UTC offset, not UTC — Arvind Regukumar
 - 2026-09-22T20:29:23+05:30 — Dropped the UTC offset suffix from the demo log filename doc — local time only — Arvind Regukumar
+- 2026-09-22T22:59:02+05:30 — Found and fixed the actual bug behind the zsh hang the earlier trailing-comment note only partially explained: the Quickstart's own .env-creation comment contained an apostrophe ("...since that's..."), which opens an unterminated quote in interactive zsh and hangs indefinitely — confirmed live via a direct before/after zsh repro (quote>/unmatched error before, clean parse after). Also found the earlier note's "comments on their own line work in both" claim was wrong even for apostrophe-free comments — raw interactive zsh without `setopt interactivecomments` throws `command not found: #` for every comment line regardless of position, just non-fatally. Reworded the offending comment and rewrote this note to lead with `setopt interactivecomments` as the actual durable fix rather than per-comment wording patches. Swept the whole repo for other apostrophes inside # lines within real bash/sh/zsh fences — found and fixed 2 more (README.md, docs/PHASE2_SETUP_RUNBOOK.md) — Arvind Regukumar

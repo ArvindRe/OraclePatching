@@ -2,6 +2,8 @@
 # Changelog:
 #   2026-09-15T23:04:48+05:30 — Initial version — full per-patch variable schema — Arvind Regukumar
 #   2026-09-16T00:12:11+05:30 — Added audit_log_path default for mandatory audit logging — Arvind Regukumar
+#   2026-09-22T21:15:25+05:30 — Added skip_backup_check and backup_max_age_hours defaults for the new backup-verification precheck gate — Arvind Regukumar
+#   2026-09-23T00:44:28+05:30 — Added verify_backup_restorable default (off) for the new opt-in RESTORE VALIDATE step — Arvind Regukumar
 # Full variable schema for one patch run. Override per-patch in
 # vars/patches/<PATCH_ID>.yml and pass with -e @vars/patches/<PATCH_ID>.yml.
 #
@@ -35,4 +37,19 @@ run_full_patch: true
 # failure, precheck-only or full apply. Not a substitute for a client's own
 # SIEM/change-ticket system where one exists — override per client if so.
 audit_log_path: "{{ lookup('env', 'HOME') }}/.oracle_patching/audit.log"
+
+# Backup-verification gate (backup_check.yml) — refuses to proceed without a
+# recent RMAN whole-database backup (DB FULL or DB INCR, STATUS=COMPLETED)
+# per CDB. Runs unconditionally as part of precheck, same as the free-space
+# assert above it. Override only with an explicit -e at invocation time —
+# never flip this to true in a committed inventory/vars file, that would
+# silently disable the gate for every future run against that host.
+skip_backup_check: false
+backup_max_age_hours: 24
+
+# Opt-in, stronger check: RESTORE VALIDATE actually proves the backup is
+# restorable (reads every backup block), not just that a backup job
+# completed. Off by default — real time/I/O cost on every patch run, not a
+# cheap metadata check. See backup_check.yml's own comments.
+verify_backup_restorable: false
 

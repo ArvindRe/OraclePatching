@@ -1,0 +1,163 @@
+---
+# Changelog:
+#   2026-09-22T21:15:25+05:30 — Initial version — RMAN backup-verification precheck gate — Arvind Regukumar
+#   2026-09-23T00:44:28+05:30 — Added an opt-in RESTORE VALIDATE step (verify_backup_restorable, default off) — the STATUS=COMPLETED check above proves a backup job finished, not that it's actually restorable; this closes that gap for anyone willing to pay the real time/I/O cost of a full validate on every patch run. Verified the failed_when detection logic live against the vagrant VM (which genuinely has no backup): rc=1 on the real RMAN failure, AND real "RMAN-" error markers (RMAN-06026, RMAN-06023, etc.) present in stdout — both halves of the belt-and-braces failed_when condition independently confirmed against a real failure, not assumed — Arvind Regukumar
+
+# Refuses to proceed without a recent whole-database RMAN backup, unless
+# explicitly overridden with -e skip_backup_check=true. This runs
+# unconditionally as part of precheck — same pattern as precheck.yml's
+# existing free-space assert (that one already hard-fails the play on an
+# unmet prerequisite; this is the same kind of gate, not a new one).
+#
+# Query uses a quoted heredoc (<<'SQL', not SQL) rather than a printf
+# one-liner — v$rman_backup_job_details contains a literal $, and an
+# earlier bug elsewhere in this project (Patching_Agentic's
+# agents/scanner/scan_playbook.yml, see its changelog) already proved that
+# escaping a $ for a printf-piped query is easy to get wrong and silent:
+# the shell expands $rman_backup_job_details as an undefined variable to
+# empty, truncating the query, rather than erroring loudly. A quoted
+# heredoc disables shell expansion inside it entirely, sidestepping the
+# whole bug class rather than trying to escape it correctly.
+#
+# Column names/values verified against real Oracle 19c documentation
+# (docs.oracle.com V$RMAN_BACKUP_JOB_DETAILS reference), not assumed from
+# memory: STATUS is one of RUNNING WITH WARNINGS / RUNNING WITH ERRORS /
+# COMPLETED / COMPLETED WITH WARNINGS / COMPLETED WITH ERRORS / FAILED;
+# INPUT_TYPE includes DB FULL, DB INCR, DATAFILE FULL/INCR, ARCHIVELOG,
+# CONTROLFILE, RECVR AREA, SPFILE.
+#
+# Deliberately requires STATUS = 'COMPLETED' exactly, not also "COMPLETED
+# WITH WARNINGS" — this is a safety gate ahead of a destructive operation,
+# and a warning could be masking something (e.g. a skipped corrupt block).
+# If a real backup did complete with a benign warning, that's exactly what
+# skip_backup_check=true is for — a human decision, not a silent pass.
+#
+# Deliberately accepts both DB FULL and DB INCR — a level-0 incremental
+# combined with the archivelog stream is a legitimate restore path and not
+# every site runs full backups every time. What this gate does NOT check:
+# whether a recent ARCHIVELOG backup also exists, which matters for
+# recovering to just-before-the-patch rather than just to the last full/
+# incremental backup's point in time. Known, documented limitation — not
+# silently assumed fine.
+
+- name: Assert skip_backup_check is a real boolean if set
+  ansible.builtin.assert:
+    that:
+      - skip_backup_check in [true, false, 'true', 'false']
+    fail_msg: "skip_backup_check must be true or false, got: {{ skip_backup_check }}"
+    quiet: true
+
+- name: Assert backup_max_age_hours is a positive integer
+  ansible.builtin.assert:
+    that:
+      - backup_max_age_hours | int > 0
+    fail_msg: "backup_max_age_hours must be a positive integer, got: {{ backup_max_age_hours }}"
+    quiet: true
+
+- name: Query most recent whole-database RMAN backup per CDB
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      sqlplus -s / as sysdba <<'SQL'
+      set pages 0 feed off head off
+      select nvl(to_char(max(end_time), 'YYYY-MM-DD HH24:MI:SS'), 'NONE')
+      from v$rman_backup_job_details
+      where input_type in ('DB FULL', 'DB INCR')
+        and status = 'COMPLETED'
+        and end_time >= sysdate - ({{ backup_max_age_hours }} / 24);
+      exit;
+      SQL
+    executable: /bin/bash
+  become: true
+  become_user: "{{ oracle_os_owner }}"
+  environment:
+    ORACLE_HOME: "{{ oracle_home }}"
+    ORACLE_SID: "{{ item.sid }}"
+    PATH: "{{ oracle_home }}/bin:/usr/bin:/bin"
+  register: dp_backup_check
+  changed_when: false
+  loop: "{{ cdbs }}"
+  loop_control:
+    label: "{{ item.sid }}"
+
+- name: Show most recent qualifying backup per CDB (NONE = nothing found in window)
+  ansible.builtin.debug:
+    msg: "{{ item.item.sid }}: {{ item.stdout | trim }}"
+  loop: "{{ dp_backup_check.results }}"
+  loop_control:
+    label: "{{ item.item.sid }}"
+
+- name: Refuse to proceed without a recent backup (override with -e skip_backup_check=true)
+  ansible.builtin.assert:
+    that:
+      - item.stdout | trim != 'NONE'
+    fail_msg: >-
+      No RMAN whole-database backup (DB FULL or DB INCR, STATUS=COMPLETED)
+      found for {{ item.item.sid }} within the last {{ backup_max_age_hours }} hours.
+      Take a backup first, or override with -e skip_backup_check=true if you have
+      a verified backup this check isn't seeing (e.g. STATUS=COMPLETED WITH WARNINGS,
+      or catalogued somewhere this instance's controlfile record doesn't cover).
+    quiet: true
+  loop: "{{ dp_backup_check.results }}"
+  loop_control:
+    label: "{{ item.item.sid }}"
+  when: not (skip_backup_check | bool)
+
+- name: Backup check skipped (skip_backup_check=true)
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: backup-verification gate skipped via skip_backup_check=true for
+      {{ inventory_hostname }} — proceeding without confirming a recent backup exists.
+  when: skip_backup_check | bool
+
+# --- Optional, stronger check: is the backup actually RESTORABLE? ---
+#
+# Everything above proves a backup JOB completed — it does not prove the
+# backup can actually be restored. Per Oracle's own Backup and Recovery
+# guide (see rag/knowledge_staging/rman_backup_validation_before_patch.yml),
+# RESTORE ... VALIDATE is the only command that actually simulates a real
+# restore (reads every block of every backup piece, same I/O path as a real
+# restore, writes no output files). Deliberately NOT run by default: it
+# reads the entire backup set, which is real time and I/O on every single
+# patch run, not a cheap metadata check like the STATUS query above — a
+# cost/benefit tradeoff, not an oversight. Opt in with
+# -e verify_backup_restorable=true when that cost is acceptable (e.g. a
+# quiet maintenance window, or a small database).
+- name: Validate the backup is actually restorable (RESTORE VALIDATE — opt-in, reads every backup block)
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      rman target / <<'RMAN'
+      RESTORE DATABASE VALIDATE;
+      RESTORE ARCHIVELOG ALL VALIDATE;
+      RMAN
+    executable: /bin/bash
+  become: true
+  become_user: "{{ oracle_os_owner }}"
+  environment:
+    ORACLE_HOME: "{{ oracle_home }}"
+    ORACLE_SID: "{{ item.sid }}"
+    PATH: "{{ oracle_home }}/bin:/usr/bin:/bin"
+  register: dp_restore_validate
+  changed_when: false
+  # RMAN's own process exit code is not fully trusted here (behavior across
+  # versions/scripts is inconsistent enough that this project doesn't rely
+  # on it alone) — also grep stdout for RMAN-/ORA- error markers, the same
+  # defensive-parsing standard used elsewhere in this project rather than
+  # trusting a single unverified signal.
+  failed_when: >-
+    dp_restore_validate.rc != 0 or
+    'RMAN-' in dp_restore_validate.stdout or
+    'ORA-' in dp_restore_validate.stdout
+  loop: "{{ cdbs }}"
+  loop_control:
+    label: "{{ item.sid }}"
+  when: (verify_backup_restorable | bool) and not (skip_backup_check | bool)
+
+- name: Show RESTORE VALIDATE result per CDB
+  ansible.builtin.debug:
+    msg: "{{ item.item.sid }}: {{ 'RESTORABLE' if item.rc == 0 else 'FAILED — see stdout_lines above' }}"
+  loop: "{{ dp_restore_validate.results }}"
+  loop_control:
+    label: "{{ item.item.sid }}"
+  when: (verify_backup_restorable | bool) and not (skip_backup_check | bool)

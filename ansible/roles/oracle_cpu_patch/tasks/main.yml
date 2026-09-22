@@ -2,6 +2,7 @@
 # Changelog:
 #   2026-09-15T23:04:48+05:30 — Initial version — precheck->stage->confirm gate->apply->datapatch->postcheck dispatch — Arvind Regukumar
 #   2026-09-16T00:12:11+05:30 — Wrapped sequence in block/rescue/always to make audit logging mandatory on every outcome — Arvind Regukumar
+#   2026-09-22T21:15:25+05:30 — Added backup_check.yml to the precheck sequence — refuses to proceed without a recent RMAN whole-database backup, overridable with -e skip_backup_check=true. Runs unconditionally, same as precheck.yml's existing free-space assert — Arvind Regukumar
 # Order: precheck -> stage (+ conflict analysis) -> [hard confirm gate] ->
 # stop -> apply -> start -> datapatch -> postcheck.
 #
@@ -40,6 +41,10 @@
 - block:
     - name: Precheck
       ansible.builtin.import_tasks: precheck.yml
+      tags: [precheck]
+
+    - name: Backup verification gate
+      ansible.builtin.import_tasks: backup_check.yml
       tags: [precheck]
 
     - name: Stage patch and run conflict analysis

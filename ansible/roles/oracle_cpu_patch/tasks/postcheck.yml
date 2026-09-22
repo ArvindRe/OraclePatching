@@ -1,6 +1,7 @@
 ---
 # Changelog:
 #   2026-09-15T23:04:48+05:30 — Initial version — opatch lsinventory + dba_registry_sqlpatch verification — Arvind Regukumar
+#   2026-09-23T00:44:28+05:30 — Fixed two real bugs found while tightening the informational-only STATUS check (STATUS.md Open Issues): (1) it queried DBA_REGISTRY_SQLPATCH, which only ever shows the connected container's own status (CDB$ROOT here) — structurally blind to every PDB, not just informational; switched to CDB_REGISTRY_SQLPATCH (verified against real Oracle docs/search results, not assumed), joined to v$pdbs so output names the actual PDB. (2) Now hard-fails (assert, not debug) if any container's STATUS isn't SUCCESS. Every Jinja expression (subelements flattening, per-CDB zero-rows detection, the mixed-status assert) verified via real Templar across 3 cases (all-success, zero-rows, mixed success+failure) before touching the VM. Live-verified the SQL itself against the real CDB1: correctly returns 0 rows for a made-up patch_id (rc=0, no error), and correctly returns a real row (CDB$ROOT|SUCCESS|29517242, an install-time patch) with the nvl(p.name,'CDB$ROOT') fallback confirmed correct — Arvind Regukumar
 - name: Verify patch registered in OPatch inventory
   ansible.builtin.command:
     argv: ["{{ oracle_home }}/OPatch/opatch", "lsinventory", "-patch", "{{ patch_id }}"]
@@ -11,12 +12,32 @@
   changed_when: false
   failed_when: patch_id not in dp_lsinv.stdout
 
-- name: Query dba_registry_sqlpatch status per CDB
+- name: Query CDB_REGISTRY_SQLPATCH status (CDB$ROOT + every open PDB) per CDB
+  # CDB_REGISTRY_SQLPATCH, not DBA_REGISTRY_SQLPATCH — verified, not assumed:
+  # DBA_REGISTRY_SQLPATCH only ever reports the CURRENTLY CONNECTED
+  # container's own status; connected as / as sysdba with no ALTER SESSION
+  # SET CONTAINER, that's CDB$ROOT only. It was structurally blind to every
+  # PDB, not just "informational" — a real bug found while addressing the
+  # informational-only STATUS gate, not the gap that was originally being
+  # fixed. CDB_REGISTRY_SQLPATCH adds a CON_ID column and genuinely spans
+  # every container — but per Oracle's own documented behavior, CDB views
+  # only return rows for OPEN PDBs, so a closed PDB still won't show up
+  # here (same underlying cause as datapatch itself silently skipping
+  # closed PDBs — see rag/knowledge_staging/datapatch_cdb_pdb_behavior.yml).
+  # Joined against v$pdbs so output/failures name the actual PDB, not a
+  # bare CON_ID number.
   ansible.builtin.shell:
     cmd: |
       set -o pipefail
-      printf "set pages 0 feed off\nselect patch_id, patch_type, status from dba_registry_sqlpatch where patch_id = %s;\nexit;\n" "{{ patch_id }}" |
-        sqlplus -s / as sysdba
+      sqlplus -s / as sysdba <<'SQL'
+      set pages 0 feed off head off colsep '|'
+      select nvl(p.name, 'CDB$ROOT') || '|' || r.status
+      from cdb_registry_sqlpatch r
+      left join v$pdbs p on p.con_id = r.con_id
+      where r.patch_id = {{ patch_id }}
+      order by 1;
+      exit;
+      SQL
     executable: /bin/bash
   become_user: "{{ oracle_os_owner }}"
   environment:
@@ -29,12 +50,46 @@
   loop_control:
     label: "{{ item.sid }}"
 
-- name: Show dba_registry_sqlpatch status per CDB
+- name: Flatten container/status rows across all CDBs
+  ansible.builtin.set_fact:
+    dp_sqlpatch_rows: "{{ (dp_sqlpatch_rows | default([])) + [{'cdb': item.0.item.sid, 'container': item.1.split('|')[0], 'status': item.1.split('|')[1]}] }}"
+  loop: "{{ dp_sqlpatch_check.results | subelements('stdout_lines', skip_missing=True) }}"
+  loop_control:
+    label: "{{ item.0.item.sid }} / {{ item.1 }}"
+
+- name: Show CDB_REGISTRY_SQLPATCH status per container
   ansible.builtin.debug:
-    msg: "{{ item.item.sid }}: {{ item.stdout_lines | default(['(no rows — patch not registered for this CDB)']) }}"
+    msg: "{{ item.cdb }} / {{ item.container }}: {{ item.status }}"
+  loop: "{{ dp_sqlpatch_rows | default([]) }}"
+  loop_control:
+    label: "{{ item.cdb }} / {{ item.container }}"
+
+- name: Flag any CDB with zero rows found (patch not registered anywhere open)
+  ansible.builtin.debug:
+    msg: >-
+      {{ item.item.sid }}: no CDB_REGISTRY_SQLPATCH rows found for patch {{ patch_id }}
+      in any open container — either the patch isn't registered here, or every PDB
+      was closed when datapatch ran (CDB views only show OPEN containers).
   loop: "{{ dp_sqlpatch_check.results }}"
   loop_control:
     label: "{{ item.item.sid }}"
+  when: (dp_sqlpatch_rows | default([]) | selectattr('cdb', 'equalto', item.item.sid) | list | length) == 0
+
+- name: Refuse a successful postcheck if any container's patch STATUS isn't SUCCESS
+  ansible.builtin.assert:
+    that:
+      - item.status == 'SUCCESS'
+    fail_msg: >-
+      cdb_registry_sqlpatch reports STATUS={{ item.status }} (not SUCCESS) for
+      patch {{ patch_id }} in {{ item.cdb }} / {{ item.container }}. This is a
+      real patch-apply failure at the SQL level — do not consider this run
+      successful. Check the datapatch log under cfgtoollogs/ before deciding
+      next steps; this project does not automate rollback (see
+      playbooks/cpu_patch_rollback_info.yml).
+    quiet: true
+  loop: "{{ dp_sqlpatch_rows | default([]) }}"
+  loop_control:
+    label: "{{ item.cdb }} / {{ item.container }}"
 
 - name: Post-apply checklist
   ansible.builtin.debug:
